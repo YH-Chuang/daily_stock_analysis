@@ -21,7 +21,7 @@ from typing import Optional, Dict, Any, List
 import pandas as pd
 
 from src.config import get_config
-from src.report_language import normalize_report_language
+from src.report_language import choose_report_text, normalize_report_language
 from src.search_service import SearchService
 from src.core.market_profile import get_profile, MarketProfile
 from src.core.market_strategy import get_market_strategy_blueprint
@@ -372,6 +372,24 @@ Focus on the TAIEX, semiconductor heavyweights, institutional net buying, and th
 - 进攻：主板块联动上行且量能/风险位同步改善。
 - 均衡：指数分化或量能未明显放大，仓位保守执行。
 - 防守：突破失守且波动率抬升时，优先减码并保留反弹可交易性。"""
+        if self.region == "us" and self._get_review_language() == "zh-tw":
+            return """## 美股市場三段式復盤策略
+聚焦指數趨勢、宏觀敘事與類股輪動，給出次日風控與部位框架。
+
+### 策略原則
+- 先看標普500、那斯達克、道瓊是否同向，確認主線是否一致。
+- 結合宏觀與流動性指標，判斷風險偏好是修復還是轉弱。
+- 將復盤結果對應為「進攻／均衡／防守」動作建議，並給出明確的觸發失效條件。
+
+### 分析維度
+- 趨勢結構：判斷市場處於上衝、盤整還是轉向防守，並確認是否出現關鍵支撐位背離。
+- 資金與情緒：區分宏觀政策、貨幣面與波動率對權益風險的影響。
+- 主題線索：辨識延續性最強的主題，以及類股輪動是否形成可交易主線。
+
+### 行動框架
+- 進攻：主要類股聯動上行，且量能／風險位同步改善。
+- 均衡：指數分化或量能未明顯放大，部位保守執行。
+- 防守：跌破關鍵支撐且波動率上升時，優先減碼並保留反彈時的可操作性。"""
         if not (self.region == "cn" and self._get_review_language() == "en"):
             return self.strategy.to_prompt_block()
         return """## Strategy Blueprint: A-share Three-Phase Recap Strategy
@@ -432,6 +450,12 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 - **趋势结构**：判断市场在进攻、震荡与防守中的状态是否一致。
 - **资金与情绪**：结合波动率、宽度和主题轮动评估风险偏好。
 - **主题主线**：识别可延续和可放大的行业主线与防守线索。
+"""
+        if self.region == "us" and review_language == "zh-tw":
+            return """### 六、策略框架
+- **趨勢結構**：判斷市場在進攻、盤整與防守中的狀態是否一致。
+- **資金與情緒**：結合波動率、寬度和主題輪動評估風險偏好。
+- **主題主線**：辨識可延續、可放大的產業主線與防守線索。
 """
         if not (self.region == "cn" and review_language == "en"):
             return self.strategy.to_markdown_block()
@@ -650,12 +674,12 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         search_queries = self.profile.news_queries
         review_language = self._get_review_language()
         market_names = {
-            "cn": "大盘" if review_language == "zh" else "A-share market",
-            "us": "美股市场" if review_language == "zh" else "US market",
-            "hk": "港股市场" if review_language == "zh" else "HK market",
-            "jp": "日本股市" if review_language == "zh" else "Japan stock market",
-            "kr": "韩国股市" if review_language == "zh" else "Korea stock market",
-            "tw": "台股" if review_language == "zh" else "Taiwan stock market",
+            "cn": choose_report_text(review_language, zh="大盘", zh_tw="大盤", other="A-share market"),
+            "us": choose_report_text(review_language, zh="美股市场", zh_tw="美股市場", other="US market"),
+            "hk": choose_report_text(review_language, zh="港股市场", zh_tw="港股市場", other="HK market"),
+            "jp": choose_report_text(review_language, zh="日本股市", zh_tw="日本股市", other="Japan stock market"),
+            "kr": choose_report_text(review_language, zh="韩国股市", zh_tw="韓國股市", other="Korea stock market"),
+            "tw": choose_report_text(review_language, zh="台股", zh_tw="台股", other="Taiwan stock market"),
         }
         
         try:

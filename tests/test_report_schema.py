@@ -164,7 +164,10 @@ class TestAnalyzerSchemaFallback(unittest.TestCase):
         self.assertEqual(result.action_label, "持有")
 
     def test_parse_response_preserves_explicit_action_in_raw_result(self) -> None:
-        analyzer = GeminiAnalyzer()
+        # 显式注入 report_language，避免本用例的简体断言受运行环境的
+        # REPORT_LANGUAGE（例如 zh-tw）影响而误报失败。
+        with patch.object(GeminiAnalyzer, "_init_litellm", return_value=None):
+            analyzer = GeminiAnalyzer(config=SimpleNamespace(report_language="zh"))
         response = json.dumps({
             "stock_name": "贵州茅台",
             "sentiment_score": 58,

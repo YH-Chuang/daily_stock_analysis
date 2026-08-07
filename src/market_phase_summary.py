@@ -50,6 +50,7 @@ _PUBLIC_SOURCE_LABELS_EN = {
 }
 _MARKET_STATUS_PREFIX = {
     "zh": "市场状态",
+    "zh-tw": "市場狀態",
     "en": "Market status",
 }
 _MARKET_LABELS_ZH = {
@@ -72,6 +73,15 @@ _PHASE_LABELS_ZH = {
     "postmarket": "盘后",
     "non_trading": "非交易日",
     "unknown": "阶段未知",
+}
+_PHASE_LABELS_ZH_TW = {
+    "premarket": "盤前",
+    "intraday": "盤中",
+    "lunch_break": "午間休市",
+    "closing_auction": "臨近收盤",
+    "postmarket": "盤後",
+    "non_trading": "非交易日",
+    "unknown": "階段未知",
 }
 _PHASE_LABELS_EN = {
     "premarket": "Pre-market",
@@ -248,9 +258,20 @@ def format_public_market_status_line(
         return ""
 
     # Korean reuses the English structural summary; output language is set by directive.
-    lang = "en" if str(report_language or "").lower().startswith(("en", "ko")) else "zh"
-    phase_labels = _PHASE_LABELS_EN if lang == "en" else _PHASE_LABELS_ZH
-    market_labels = _MARKET_LABELS_EN if lang == "en" else _MARKET_LABELS_ZH
+    raw_language = str(report_language or "").lower().replace("_", "-")
+    if raw_language.startswith(("en", "ko")):
+        lang = "en"
+    elif raw_language.startswith(("zh-tw", "zh-hant")):
+        lang = "zh-tw"
+    else:
+        lang = "zh"
+    if lang == "en":
+        phase_labels, market_labels = _PHASE_LABELS_EN, _MARKET_LABELS_EN
+    elif lang == "zh-tw":
+        # 市场标签 A股/港股/美股/台股 简繁同形，直接复用 ZH 表。
+        phase_labels, market_labels = _PHASE_LABELS_ZH_TW, _MARKET_LABELS_ZH
+    else:
+        phase_labels, market_labels = _PHASE_LABELS_ZH, _MARKET_LABELS_ZH
     phase_label = phase_labels.get(phase, phase)
     market = _safe_text(phase_summary.get("market"))
     market_key = market.lower()
@@ -260,7 +281,9 @@ def format_public_market_status_line(
     else:
         value = phase_label
     separator = ": " if lang == "en" else "："
-    return f"{_MARKET_STATUS_PREFIX[lang]}{separator}{value}"
+    # 缺失的语言变体退回 zh，避免新增报告语言时在运行期抛 KeyError。
+    prefix = _MARKET_STATUS_PREFIX.get(lang) or _MARKET_STATUS_PREFIX["zh"]
+    return f"{prefix}{separator}{value}"
 
 
 def _as_mapping(value: Any) -> Optional[Mapping[str, Any]]:

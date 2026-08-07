@@ -22,6 +22,8 @@ from typing import Any, Iterable, Mapping, Optional
 
 import markdown2
 
+from src.report_language import choose_report_text, normalize_report_language
+
 
 PROJECT_URL = "https://github.com/ZhuLinsen/daily_stock_analysis"
 PROJECT_REPOSITORY = "ZhuLinsen/daily_stock_analysis"
@@ -68,6 +70,24 @@ _POSTER_TEXT = {
         "open_source": "开源项目 · GitHub", "xiaohongshu": "小红书",
         "disclaimer": "AI 生成，仅供研究交流，不构成投资建议。市场有风险，决策需谨慎。",
         "source": "数据源",
+    },
+    # zh-tw 使用台湾惯用语：信号->訊號、板块->類股、仓位->部位、利好->利多、数据->資料。
+    "zh-tw": {
+        "brand": "AI 股票分析", "stock_subtitle": "個股決策卡 · 結論、價位與風險一圖讀懂",
+        "market_subtitle": "指數、寬度、主流與風險的收盤復盤", "multi_title": "多市場復盤",
+        "multi_subtitle": "依市場分段展示指數、主流與風險邊界", "dashboard_subtitle": "多股決策摘要",
+        "score": "評分", "confidence": "信心度", "trend": "趨勢", "core": "核心結論",
+        "snapshot": "市場快照", "execution": "執行計劃", "technical": "技術參考",
+        "next_watch": "下一步觀察", "positive_catalysts": "利多催化", "risk_alerts": "風險警示",
+        "catalysts_risks": "催化與風險", "no_position": "未持股", "holding": "已持股",
+        "position": "部位", "entry": "進場", "risk_control": "風控", "position_advice": "持股建議",
+        "market_signal": "市場訊號", "today_conclusion": "今日結論", "breadth": "市場寬度",
+        "dimensions": "訊號拆解", "leaders": "強勢類股", "laggards": "弱勢類股",
+        "focus_tag": "關注", "avoid_tag": "迴避", "focus": "重點追蹤", "funds": "資金觀察",
+        "strategy": "明日策略", "risks": "風險提示", "tagline": "讓股票研究更簡單、更有效率",
+        "open_source": "開源專案 · GitHub", "xiaohongshu": "小紅書",
+        "disclaimer": "AI 生成，僅供研究交流，不構成投資建議。市場有風險，決策需謹慎。",
+        "source": "資料來源",
     },
     "en": {
         "brand": "AI Stock Analysis", "stock_subtitle": "Stock decision card · thesis, levels, and risks",
@@ -327,7 +347,10 @@ def _poster_language(
         if normalized.startswith("ko"):
             return "ko"
         if normalized.startswith("zh"):
-            return "zh"
+            # zh-tw is a distinct traditional-Chinese pack (see src/report_language.py);
+            # everything else that starts with "zh" (zh-cn, zh_hans, cn, chinese, ...)
+            # keeps the existing simplified-Chinese poster chrome.
+            return "zh-tw" if normalize_report_language(raw_language) == "zh-tw" else "zh"
     if re.search(r"[\uac00-\ud7af]", markdown_text or ""):
         return "ko"
     if re.search(
@@ -1982,7 +2005,12 @@ def _xiaohongshu_card(branding: ShareImageBranding, language: str) -> str:
     ) if part]
     account = " · ".join(account_parts) or branding.xiaohongshu_url.strip()
     qr_data_uri = _asset_data_uri(branding.xiaohongshu_qr_path)
-    qr_alt = f"{label}二维码" if language == "zh" else f"{label} QR"
+    qr_alt = choose_report_text(
+        language,
+        zh=f"{label}二维码",
+        zh_tw=f"{label}二維碼",
+        other=f"{label} QR",
+    )
     image = (
         f'<div class="qr-frame"><img src="{qr_data_uri}" alt="{_escape(qr_alt)}"></div>'
         if qr_data_uri else ""
@@ -2082,10 +2110,11 @@ def build_share_image_html(
         subtitle = _poster_text(language, "stock_subtitle")
         content = _stock_body(data, fallback_html)
         if data.data_source:
-            source_line = (
-                f" 数据源：{data.data_source}。"
-                if language == "zh"
-                else f" {_poster_text(language, 'source')}: {data.data_source}."
+            source_line = choose_report_text(
+                language,
+                zh=f" 数据源：{data.data_source}。",
+                zh_tw=f" 資料來源：{data.data_source}。",
+                other=f" {_poster_text(language, 'source')}: {data.data_source}.",
             )
     else:
         title = first_title

@@ -29,15 +29,16 @@ class DecisionActionFields(TypedDict):
 _ACTION_VALUES = set(get_args(DecisionAction))
 _NON_STOCK_REPORT_TYPES = {"market_review"}
 
+# zh-tw 使用台湾证券业惯用语：买入/卖出用「買進/賣出」，加仓/减仓用「加碼/減碼」。
 _ACTION_LABELS: Dict[str, Dict[str, str]] = {
-    "buy": {"zh": "买入", "en": "Buy", "ko": "매수"},
-    "add": {"zh": "加仓", "en": "Add", "ko": "추가 매수"},
-    "hold": {"zh": "持有", "en": "Hold", "ko": "보유"},
-    "reduce": {"zh": "减仓", "en": "Reduce", "ko": "비중축소"},
-    "sell": {"zh": "卖出", "en": "Sell", "ko": "매도"},
-    "watch": {"zh": "观望", "en": "Watch", "ko": "관망"},
-    "avoid": {"zh": "回避", "en": "Avoid", "ko": "회피"},
-    "alert": {"zh": "预警", "en": "Alert", "ko": "경고"},
+    "buy": {"zh": "买入", "zh-tw": "買進", "en": "Buy", "ko": "매수"},
+    "add": {"zh": "加仓", "zh-tw": "加碼", "en": "Add", "ko": "추가 매수"},
+    "hold": {"zh": "持有", "zh-tw": "持有", "en": "Hold", "ko": "보유"},
+    "reduce": {"zh": "减仓", "zh-tw": "減碼", "en": "Reduce", "ko": "비중축소"},
+    "sell": {"zh": "卖出", "zh-tw": "賣出", "en": "Sell", "ko": "매도"},
+    "watch": {"zh": "观望", "zh-tw": "觀望", "en": "Watch", "ko": "관망"},
+    "avoid": {"zh": "回避", "zh-tw": "迴避", "en": "Avoid", "ko": "회피"},
+    "alert": {"zh": "预警", "zh-tw": "預警", "en": "Alert", "ko": "경고"},
 }
 
 _EXPLICIT_ALIASES: Dict[str, DecisionAction] = {
@@ -362,7 +363,10 @@ def localize_action_label(action: Any, language: Optional[str] = "zh") -> Option
     normalized = _explicit_action(action)
     if not normalized:
         return None
-    return _ACTION_LABELS[normalized][normalize_report_language(language)]
+    labels = _ACTION_LABELS[normalized]
+    resolved = normalize_report_language(language)
+    # 缺失的语言变体退回 zh，避免新增报告语言时在运行期抛 KeyError。
+    return labels.get(resolved) or labels["zh"]
 
 
 def build_action_fields(

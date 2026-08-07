@@ -80,6 +80,7 @@ from src.llm.response_content import strip_leading_think_wrapper
 from src.storage import persist_llm_usage
 from src.data.stock_mapping import STOCK_NAME_MAP
 from src.report_language import (
+    choose_report_text,
     get_signal_level,
     get_no_data_text,
     get_placeholder_text,
@@ -1316,10 +1317,25 @@ def _capital_flow_bias_with_status(
 def _capital_flow_status_for_stability(reason: str, language: str) -> str:
     normalized = str(reason or "").strip().lower()
     if "not_supported" in normalized or "unsupported" in normalized or "not available" in normalized:
-        return "市场资金流服务暂不支持" if language == "zh" else "Capital flow source unsupported"
+        return choose_report_text(
+            language,
+            zh="市场资金流服务暂不支持",
+            zh_tw="市場資金流服務暫不支援",
+            other="Capital flow source unsupported",
+        )
     if "empty_stock_flow" in normalized or "missing" in normalized:
-        return "资金流数据缺失" if language == "zh" else "capital flow data unavailable"
-    return "资金流数据不可用" if language == "zh" else "capital flow unavailable"
+        return choose_report_text(
+            language,
+            zh="资金流数据缺失",
+            zh_tw="資金流資料缺失",
+            other="capital flow data unavailable",
+        )
+    return choose_report_text(
+        language,
+        zh="资金流数据不可用",
+        zh_tw="資金流資料不可用",
+        other="capital flow unavailable",
+    )
 
 
 def _set_decision_stability_unavailable(
@@ -1335,7 +1351,12 @@ def _set_decision_stability_unavailable(
     result.dashboard = dashboard
     dashboard["decision_stability"] = {
         "applied": False,
-        "reason": "资金流不可用，未使用资金流校准" if language == "zh" else "Capital flow unavailable; stability calibration not applied",
+        "reason": choose_report_text(
+            language,
+            zh="资金流不可用，未使用资金流校准",
+            zh_tw="資金流不可用，未使用資金流校準",
+            other="Capital flow unavailable; stability calibration not applied",
+        ),
         "capital_flow_status": _capital_flow_status_for_stability(flow_status, language),
         "current_price": current_price,
         "support": support,
@@ -1411,8 +1432,18 @@ def _apply_hold_watch_dashboard(
     if not isinstance(core, dict):
         core = {}
         dashboard["core_conclusion"] = core
-    core["signal_type"] = "🟡持有观望" if language == "zh" else "🟡 Hold / Watch"
-    core["one_sentence"] = f"{advice}：{reason}" if language == "zh" else f"{advice}: {reason}"
+    core["signal_type"] = choose_report_text(
+        language,
+        zh="🟡持有观望",
+        zh_tw="🟡持有觀望",
+        other="🟡 Hold / Watch",
+    )
+    core["one_sentence"] = choose_report_text(
+        language,
+        zh=f"{advice}：{reason}",
+        zh_tw=f"{advice}：{reason}",
+        other=f"{advice}: {reason}",
+    )
 
     position_advice = core.get("position_advice")
     if not isinstance(position_advice, dict):
@@ -1439,7 +1470,7 @@ def _apply_hold_watch_dashboard(
     dashboard["decision_stability"] = stability
 
     if reason and reason not in str(result.risk_warning or ""):
-        sep = "；" if language == "zh" else "; "
+        sep = choose_report_text(language, zh="；", zh_tw="；", other="; ")
         result.risk_warning = f"{result.risk_warning}{sep}{reason}" if result.risk_warning else reason
     result.buy_reason = reason or result.buy_reason
 
@@ -1459,6 +1490,12 @@ def _downgrade_buy_without_capital_flow(
         reason = f"{status_text}，买入结论缺少资金面确认，先按观察处理。"
         no_position = "空仓先不追买，等待资金流恢复、支撑确认或有效突破后再行动。"
         has_position = "持仓以关键支撑为风控线，资金流恢复前控制仓位。"
+        confidence = "低"
+    elif language == "zh-tw":
+        advice = "持有觀察"
+        reason = f"{status_text}，買進結論缺少資金面確認，先按觀察處理。"
+        no_position = "空手先不追買，等待資金流恢復、支撐確認或有效突破後再行動。"
+        has_position = "持有部位以關鍵支撐為風控線，資金流恢復前控制部位。"
         confidence = "低"
     else:
         advice = "Hold and watch"
@@ -1530,6 +1567,12 @@ def _set_structural_hold_wording(
             "shakeout": "洗盘观察",
             "hold": "持有观察",
         },
+        # zh-tw: 台湾证券用语在地化（震荡→盘整；其余为简繁字形对应）。
+        "zh-tw": {
+            "range": "盤整觀望",
+            "shakeout": "洗盤觀察",
+            "hold": "持有觀察",
+        },
         "en": {
             "range": "Range-bound watch",
             "shakeout": "Shakeout watch",
@@ -1541,7 +1584,12 @@ def _set_structural_hold_wording(
             "hold": "보유 관찰",
         },
     }
-    advice_default = {"zh": "持有观察", "en": "Hold and watch", "ko": "보유 관찰"}.get(language, "Hold and watch")
+    advice_default = {
+        "zh": "持有观察",
+        "zh-tw": "持有觀察",
+        "en": "Hold and watch",
+        "ko": "보유 관찰",
+    }.get(language, "Hold and watch")
     advice = advice_map.get(language, advice_map["en"]).get(advice_key, advice_default)
     reason_templates = {
         "zh": {
@@ -1551,6 +1599,15 @@ def _set_structural_hold_wording(
             "sell_with_inflow": "主力资金流入与卖出结论冲突，先按持有观察处理并跟踪支撑失效。",
             "hold_shakeout": "价格回落至支撑附近但资金未确认流出，更适合按洗盘观察处理。",
             "hold_mid_range": "价格处于支撑与压力之间且资金流不明确，维持震荡观望更可操作。",
+        },
+        # zh-tw: 主力资金→大户资金（台股无官方"主力资金"口径）；震荡→盘整；其余字形随之改为繁体。
+        "zh-tw": {
+            "buy_near_resistance": "價格接近壓力位且大戶資金未確認流入，不宜僅因短線反彈追買。",
+            "buy_with_outflow": "大戶資金流出與買進結論衝突，買點需等待支撐確認或資金回流。",
+            "sell_near_support": "價格貼近支撐且未見資金持續流出，不宜僅因單日下跌直接賣出。",
+            "sell_with_inflow": "大戶資金流入與賣出結論衝突，先按持有觀察處理並追蹤支撐失效。",
+            "hold_shakeout": "價格回落至支撐附近但資金未確認流出，更適合按洗盤觀察處理。",
+            "hold_mid_range": "價格處於支撐與壓力之間且資金流不明確，維持盤整觀望更可操作。",
         },
         "en": {
             "buy_near_resistance": "Price is near resistance without confirmed main-force inflow, so chasing the rebound is not actionable.",
@@ -1577,6 +1634,8 @@ def _set_structural_hold_wording(
     if advice_key == "range":
         if language == "zh" and "震荡" not in str(result.trend_prediction):
             result.trend_prediction = "震荡"
+        elif language == "zh-tw" and "盤整" not in str(result.trend_prediction):
+            result.trend_prediction = "盤整"
         elif language == "en":
             result.trend_prediction = "Sideways"
         elif language == "ko":
@@ -1585,6 +1644,9 @@ def _set_structural_hold_wording(
     if language == "zh":
         no_position = "空仓先不追涨杀跌，等待支撑确认、放量突破或资金回流后再行动。"
         has_position = "持仓以关键支撑为风控线，未跌破前以观察和分批控仓为主。"
+    elif language == "zh-tw":
+        no_position = "空手先不追高殺低，等待支撐確認、放量突破或資金回流後再行動。"
+        has_position = "持有部位以關鍵支撐為風控線，未跌破前以觀察和分批控管部位為主。"
     elif language == "ko":
         no_position = "현금 보유 시 추격·투매를 삼가고 지지 확인·대량 돌파·자금 재유입 후 행동하세요."
         has_position = "보유 시 핵심 지지선을 리스크 관리선으로 삼고, 이탈 전까지 관찰과 분할 관리 위주로 대응하세요."
@@ -3602,7 +3664,7 @@ class GeminiAnalyzer:
                 result = self._parse_response(response_text, code, name)
                 result.raw_response = response_text
                 result.search_performed = bool(news_context)
-                result.market_snapshot = self._build_market_snapshot(context)
+                result.market_snapshot = self._build_market_snapshot(context, report_language)
                 result.model_used = model_used
                 result.report_language = report_language
                 normalize_chip_structure_availability(result, context.get("chip"))
@@ -4247,25 +4309,32 @@ class GeminiAnalyzer:
         
         return prompt
     
-    def _format_volume(self, volume: Optional[float]) -> str:
+    @staticmethod
+    def _cjk_unit(language: Optional[str], simplified: str) -> str:
+        """返回数量级单位；zh-tw 用繁体「萬/億」，其余语言维持原样。"""
+        if normalize_report_language(language) != "zh-tw":
+            return simplified
+        return simplified.replace("亿", "億").replace("万", "萬")
+
+    def _format_volume(self, volume: Optional[float], language: Optional[str] = "zh") -> str:
         """格式化成交量显示"""
         if volume is None:
             return 'N/A'
         if volume >= 1e8:
-            return f"{volume / 1e8:.2f} 亿股"
+            return f"{volume / 1e8:.2f} {self._cjk_unit(language, '亿股')}"
         elif volume >= 1e4:
-            return f"{volume / 1e4:.2f} 万股"
+            return f"{volume / 1e4:.2f} {self._cjk_unit(language, '万股')}"
         else:
             return f"{volume:.0f} 股"
     
-    def _format_amount(self, amount: Optional[float]) -> str:
+    def _format_amount(self, amount: Optional[float], language: Optional[str] = "zh") -> str:
         """格式化成交额显示"""
         if amount is None:
             return 'N/A'
         if amount >= 1e8:
-            return f"{amount / 1e8:.2f} 亿元"
+            return f"{amount / 1e8:.2f} {self._cjk_unit(language, '亿元')}"
         elif amount >= 1e4:
-            return f"{amount / 1e4:.2f} 万元"
+            return f"{amount / 1e4:.2f} {self._cjk_unit(language, '万元')}"
         else:
             return f"{amount:.0f} 元"
 
@@ -4287,8 +4356,14 @@ class GeminiAnalyzer:
         except (TypeError, ValueError):
             return 'N/A'
 
-    def _build_market_snapshot(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """构建当日行情快照（展示用）"""
+    def _build_market_snapshot(
+        self, context: Dict[str, Any], language: Optional[str] = "zh"
+    ) -> Dict[str, Any]:
+        """构建当日行情快照（展示用）
+
+        ``language`` 只影响数量级单位的字形（zh-tw 输出「萬/億」），默认 ``zh``
+        保持既有行为不变。
+        """
         today = context.get('today', {}) or {}
         realtime = context.get('realtime', {}) or {}
         yesterday = context.get('yesterday', {}) or {}
@@ -4321,8 +4396,8 @@ class GeminiAnalyzer:
             "pct_chg": self._format_percent(today.get('pct_chg')),
             "change_amount": self._format_price(change_amount),
             "amplitude": self._format_percent(amplitude),
-            "volume": self._format_volume(today.get('volume')),
-            "amount": self._format_amount(today.get('amount')),
+            "volume": self._format_volume(today.get('volume'), language),
+            "amount": self._format_amount(today.get('amount'), language),
         }
 
         if realtime:

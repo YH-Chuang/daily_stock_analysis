@@ -9,11 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] 报告输出语言新增 `zh-tw`（繁体中文·台湾），报告结构标签（章节标题、字段名、状态词）改用台湾在地用语（如利多、类股、本益比、股价净值比），`zh`/`en`/`ko` 现有行为不变
 - [新功能] 大盘复盘支持台股（tw）区域，覆盖加权指数与费半联动
 - [修复] 台股指数行情移除 Yahoo 无数据的 ^TWOII，改用 ^SOX 费城半导体指数
 - [新功能] 新增 `data_provider/tw_index_fetcher.py`，从 TPEx / TWSE 官方开放资料（免 API key，OGDL v1）取得柜买指数、上柜市场宽度、上柜类股成交比重与加权指数备援；沿用 `tw_institutional_fetcher` 的节流、熔断与 fail-open 契约
 - [改进] yfinance 指数行情由逐个 `yf.Ticker().history()` 改为单次 `yf.download()` 批量请求（台股两档实测 0.50s -> 0.12s），减少请求数并降低限流风险；输出字段与原实现保持一致
-- [改进] 台股（tw）报告全程输出繁体中文并采用台湾金融用语，覆盖大盘复盘标题、策略蓝图、大盘复盘生成提示与个股分析生成提示；cn/hk/us/jp/kr 维持既有简体输出不变。注意：报告结构标签（章节标题等）仍来自共用的 `zh` 语言包，尚未提供独立的 `zh-tw` 语言包
+- [改进] 台股（tw）报告全程输出繁体中文并采用台湾金融用语，覆盖大盘复盘标题、策略蓝图、大盘复盘生成提示与个股分析生成提示；cn/hk/us/jp/kr 维持既有简体输出不变
+- [改进] `zh-tw` 下的数量级与币别单位改用繁体（萬股／億股／億新台幣），覆盖当日行情快照、三大法人买卖超、财报摘要与股东回报；`zh`/`en` 字形不变
+- [修复] 决策动作标签、市场阶段前缀、行情数据源显示名在遇到语言表未收录的语言时不再抛 `KeyError`，统一退回 `zh`；此前 `REPORT_LANGUAGE=ko` 会因数据源显示名缺少 `ko` 条目导致报告渲染与通知发送中断
 - [新功能] 大盘复盘（tw）新增「上柜市场补充资料」区块，展示柜买指数、上柜涨跌家数与上柜类股成交比重 Top 5，并明确标注仅涵盖上柜（TPEx）、不代表台股整体市场宽度；`TW_PROFILE.has_market_stats` / `has_sector_rankings` 维持 `False`
 - [新功能] 新增 `data_provider/tw_fundamental_fetcher.py`，从 TWSE / TPEx 官方开放资料（免 API key）取得台股本益比／殖利率／股价净值比与融资融券余额，并接入个股分析 Prompt（`.TW`/`.TWO` 专属小节，繁体中文），上市融资融券端点无日期栏位时明确标注「来源未提供日期」而非假造日期
 - [新功能] 新增 `data_provider/tw_quote_fetcher.py`（`TwQuoteFetcher`），基于 TWSE/TPEx 官方逐月行情端点作为台股日线行情第二数据源，在 Yahoo Finance 等既有数据源均失败时兜底；默认优先级 6（`TW_QUOTE_PRIORITY` 可配置），已注册进 tw 的日线数据源回退链，不影响 cn/hk/us/jp/kr 既有回退链

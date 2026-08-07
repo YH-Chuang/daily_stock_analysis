@@ -2059,16 +2059,16 @@ class NotificationService(
 
     # Display name mapping for realtime data sources
     _SOURCE_DISPLAY_NAMES = {
-        "tencent": {"zh": "腾讯财经", "en": "Tencent Finance"},
-        "akshare_em": {"zh": "东方财富", "en": "Eastmoney"},
-        "akshare_sina": {"zh": "新浪财经", "en": "Sina Finance"},
-        "akshare_qq": {"zh": "腾讯财经", "en": "Tencent Finance"},
-        "efinance": {"zh": "东方财富(efinance)", "en": "Eastmoney (efinance)"},
-        "tushare": {"zh": "Tushare Pro", "en": "Tushare Pro"},
-        "sina": {"zh": "新浪财经", "en": "Sina Finance"},
-        "stooq": {"zh": "Stooq", "en": "Stooq"},
-        "longbridge": {"zh": "长桥", "en": "Longbridge"},
-        "fallback": {"zh": "降级兜底", "en": "Fallback"},
+        "tencent": {"zh": "腾讯财经", "zh-tw": "騰訊財經", "en": "Tencent Finance"},
+        "akshare_em": {"zh": "东方财富", "zh-tw": "東方財富", "en": "Eastmoney"},
+        "akshare_sina": {"zh": "新浪财经", "zh-tw": "新浪財經", "en": "Sina Finance"},
+        "akshare_qq": {"zh": "腾讯财经", "zh-tw": "騰訊財經", "en": "Tencent Finance"},
+        "efinance": {"zh": "东方财富(efinance)", "zh-tw": "東方財富（efinance）", "en": "Eastmoney (efinance)"},
+        "tushare": {"zh": "Tushare Pro", "zh-tw": "Tushare Pro", "en": "Tushare Pro"},
+        "sina": {"zh": "新浪财经", "zh-tw": "新浪財經", "en": "Sina Finance"},
+        "stooq": {"zh": "Stooq", "zh-tw": "Stooq", "en": "Stooq"},
+        "longbridge": {"zh": "长桥", "zh-tw": "長橋", "en": "Longbridge"},
+        "fallback": {"zh": "降级兜底", "zh-tw": "降級備援", "en": "Fallback"},
     }
 
     def _get_source_display_name(self, source: Any, language: Optional[str]) -> str:
@@ -2076,7 +2076,9 @@ class NotificationService(
         mapping = self._SOURCE_DISPLAY_NAMES.get(raw_source)
         if not mapping:
             return raw_source
-        return mapping[normalize_report_language(language)]
+        # 该表没有 ko 条目，zh-tw 等新增语言也可能缺失；一律退回 zh，
+        # 避免报告渲染在运行期抛 KeyError（韩文报告此前即因此中断）。
+        return mapping.get(normalize_report_language(language)) or mapping["zh"]
 
     def _append_market_snapshot(self, lines: List[str], result: AnalysisResult) -> None:
         snapshot = getattr(result, 'market_snapshot', None)
@@ -2119,11 +2121,23 @@ class NotificationService(
         "TWD": "新台币",  # 台股 (TWSE/TPEx) 以新台币计价，避免与 A 股「元」(人民币) 混淆
     }
 
+    _CURRENCY_SUFFIX_ZH_TW = {
+        "USD": "美元",
+        "HKD": "港元",
+        "CNY": "元",
+        "RMB": "元",
+        "CNH": "元",
+        "TWD": "新台幣",
+    }
+
     @classmethod
-    def _format_amount_cn(cls, value: Any, currency: Optional[str] = None) -> str:
+    def _format_amount_cn(
+        cls, value: Any, currency: Optional[str] = None, language: Optional[str] = "zh"
+    ) -> str:
         """Format absolute amounts in 亿/万 + currency suffix; returns N/A on non-numeric.
 
-        ``currency`` accepts ``USD``/``HKD``/``CNY``; unknown values fall back to 元.
+        ``currency`` accepts ``USD``/``HKD``/``CNY``/``TWD``; unknown values fall back to 元.
+        zh-tw 输出繁体数量级与币别（「億新台幣」）；其余语言维持既有字形。
         """
         try:
             amount = float(value)
@@ -2131,13 +2145,15 @@ class NotificationService(
             return "N/A"
         if amount != amount:  # NaN
             return "N/A"
+        traditional = normalize_report_language(language) == "zh-tw"
         sign = "-" if amount < 0 else ""
         abs_amount = abs(amount)
-        suffix = cls._CURRENCY_SUFFIX.get((currency or "").upper(), "元")
+        table = cls._CURRENCY_SUFFIX_ZH_TW if traditional else cls._CURRENCY_SUFFIX
+        suffix = table.get((currency or "").upper(), "元")
         if abs_amount >= 1e8:
-            return f"{sign}{abs_amount / 1e8:.2f} 亿{suffix}"
+            return f"{sign}{abs_amount / 1e8:.2f} {'億' if traditional else '亿'}{suffix}"
         if abs_amount >= 1e4:
-            return f"{sign}{abs_amount / 1e4:.2f} 万{suffix}"
+            return f"{sign}{abs_amount / 1e4:.2f} {'萬' if traditional else '万'}{suffix}"
         return f"{sign}{abs_amount:.0f} {suffix}"
 
     @staticmethod
@@ -2148,14 +2164,21 @@ class NotificationService(
             return "N/A"
 
     @classmethod
-    def _format_per_share(cls, value: Any, currency: Optional[str] = None) -> str:
+    def _format_per_share(
+        cls, value: Any, currency: Optional[str] = None, language: Optional[str] = "zh"
+    ) -> str:
         try:
             amount = float(value)
         except (TypeError, ValueError):
             return "N/A"
         if amount != amount:  # NaN
             return "N/A"
-        suffix = cls._CURRENCY_SUFFIX.get((currency or "").upper(), "元")
+        table = (
+            cls._CURRENCY_SUFFIX_ZH_TW
+            if normalize_report_language(language) == "zh-tw"
+            else cls._CURRENCY_SUFFIX
+        )
+        suffix = table.get((currency or "").upper(), "元")
         return f"{amount:.4f} {suffix}"
 
     @staticmethod
@@ -2240,9 +2263,9 @@ class NotificationService(
         report_language = self._get_report_language(result)
         labels = get_report_labels(report_language)
 
-        self._append_financial_summary(lines, blocks, labels)
-        self._append_shareholder_return(lines, blocks, labels)
-        self._append_institutional_flow(lines, blocks, labels)
+        self._append_financial_summary(lines, blocks, labels, report_language)
+        self._append_shareholder_return(lines, blocks, labels, report_language)
+        self._append_institutional_flow(lines, blocks, labels, report_language)
         self._append_related_boards(lines, blocks, labels)
 
     def _append_financial_summary(
@@ -2250,15 +2273,18 @@ class NotificationService(
         lines: List[str],
         blocks: Dict[str, Any],
         labels: Dict[str, str],
+        language: Optional[str] = "zh",
     ) -> None:
         report = blocks.get("financial_report") or {}
         growth = blocks.get("growth") or {}
         currency = report.get("currency") if isinstance(report.get("currency"), str) else None
         cells = {
             "report_date": self._format_text(report.get("report_date")),
-            "revenue": self._format_amount_cn(report.get("revenue"), currency),
-            "net_profit": self._format_amount_cn(report.get("net_profit_parent"), currency),
-            "operating_cash_flow": self._format_amount_cn(report.get("operating_cash_flow"), currency),
+            "revenue": self._format_amount_cn(report.get("revenue"), currency, language),
+            "net_profit": self._format_amount_cn(report.get("net_profit_parent"), currency, language),
+            "operating_cash_flow": self._format_amount_cn(
+                report.get("operating_cash_flow"), currency, language
+            ),
             "roe": self._format_percent(report.get("roe") if report.get("roe") is not None else growth.get("roe")),
             "revenue_yoy": self._format_percent(growth.get("revenue_yoy")),
             "net_profit_yoy": self._format_percent(growth.get("net_profit_yoy")),
@@ -2291,6 +2317,7 @@ class NotificationService(
         lines: List[str],
         blocks: Dict[str, Any],
         labels: Dict[str, str],
+        language: Optional[str] = "zh",
     ) -> None:
         dividend = blocks.get("dividend") or {}
         report = blocks.get("financial_report") or {}
@@ -2307,7 +2334,9 @@ class NotificationService(
 
         ttm_event_count = dividend.get("ttm_event_count")
         cells = {
-            "ttm_cash": self._format_per_share(dividend.get("ttm_cash_dividend_per_share"), dividend_currency),
+            "ttm_cash": self._format_per_share(
+                dividend.get("ttm_cash_dividend_per_share"), dividend_currency, language
+            ),
             "ttm_count": str(ttm_event_count) if isinstance(ttm_event_count, int) else "N/A",
             "ttm_yield": self._format_percent(dividend.get("ttm_dividend_yield_pct")),
             "latest_ex": self._format_text(latest_event.get("ex_dividend_date") or latest_event.get("event_date")),
@@ -2331,10 +2360,11 @@ class NotificationService(
         ])
 
     @classmethod
-    def _format_net_shares(cls, value: Any) -> str:
+    def _format_net_shares(cls, value: Any, language: Optional[str] = "zh") -> str:
         """Format an institutional net buy/sell in 万股/亿股, signed (+ = net buy).
 
         Thresholds: abs >= 1e8 -> 亿股, >= 1e4 -> 万股, else 股. None/NaN/non-numeric -> N/A.
+        zh-tw 输出繁体单位「萬股 / 億股」；其余语言维持既有字形。
         """
         try:
             amount = float(value)
@@ -2342,12 +2372,13 @@ class NotificationService(
             return "N/A"
         if amount != amount:  # NaN
             return "N/A"
+        traditional = normalize_report_language(language) == "zh-tw"
         sign = "+" if amount > 0 else ("-" if amount < 0 else "")
         a = abs(amount)
         if a >= 1e8:
-            return f"{sign}{a / 1e8:.2f} 亿股"
+            return f"{sign}{a / 1e8:.2f} {'億股' if traditional else '亿股'}"
         if a >= 1e4:
-            return f"{sign}{a / 1e4:.2f} 万股"
+            return f"{sign}{a / 1e4:.2f} {'萬股' if traditional else '万股'}"
         return f"{sign}{a:.0f} 股"
 
     def _append_institutional_flow(
@@ -2355,6 +2386,7 @@ class NotificationService(
         lines: List[str],
         blocks: Dict[str, Any],
         labels: Dict[str, str],
+        language: Optional[str] = "zh",
     ) -> None:
         """Append the 三大法人 (institutional flows) table — tw-only.
 
@@ -2366,10 +2398,10 @@ class NotificationService(
             return
         inst = blocks.get("institution") or {}
         cells = {
-            "foreign": self._format_net_shares(inst.get("foreign_net")),
-            "trust": self._format_net_shares(inst.get("trust_net")),
-            "dealer": self._format_net_shares(inst.get("dealer_net")),
-            "total": self._format_net_shares(inst.get("total_net")),
+            "foreign": self._format_net_shares(inst.get("foreign_net"), language),
+            "trust": self._format_net_shares(inst.get("trust_net"), language),
+            "dealer": self._format_net_shares(inst.get("dealer_net"), language),
+            "total": self._format_net_shares(inst.get("total_net"), language),
         }
         if all(v == "N/A" for v in cells.values()):
             return

@@ -8,17 +8,28 @@ from typing import Any, Dict, Optional
 
 from src.schemas.decision_scale import signal_key_for_score
 
-SUPPORTED_REPORT_LANGUAGES = ("zh", "en", "ko")
+SUPPORTED_REPORT_LANGUAGES = ("zh", "zh-tw", "en", "ko")
 
 _REPORT_LANGUAGE_ALIASES = {
     "zh-cn": "zh",
     "zh_cn": "zh",
     "zh-hans": "zh",
     "zh_hans": "zh",
-    "zh-tw": "zh",
-    "zh_tw": "zh",
     "cn": "zh",
     "chinese": "zh",
+    # ``zh-tw`` is a standalone language (Traditional Chinese, Taiwan wording),
+    # not an alias of ``zh``.  ``normalize_report_language`` only maps spaces to
+    # underscores, so "zh-tw" survives verbatim and needs no alias entry; the
+    # underscore/legacy spellings below are what must be redirected.
+    "zh_tw": "zh-tw",
+    "zh-hant": "zh-tw",
+    "zh_hant": "zh-tw",
+    "zh-hk": "zh-tw",
+    "zh_hk": "zh-tw",
+    "hant": "zh-tw",
+    "zhtw": "zh-tw",
+    "traditional": "zh-tw",
+    "traditional_chinese": "zh-tw",
     "english": "en",
     "en-us": "en",
     "en_us": "en",
@@ -63,16 +74,31 @@ _OPERATION_ADVICE_CANONICAL_MAP = {
     "비중축소": "reduce",
     "매도": "sell",
     "적극 매도": "strong_sell",
+    # Traditional Chinese / Taiwan wording emitted by the model under zh-tw.
+    # 台股慣用「買進 / 賣出 / 加碼 / 減碼」，「觀望」與「持有」寫法與簡體同形者不重複列出。
+    "強烈買進": "strong_buy",
+    "強烈買入": "strong_buy",
+    "買進": "buy",
+    "買入": "buy",
+    "加碼": "buy",
+    "加倉": "buy",
+    "洗盤觀察": "hold",
+    "觀察": "hold",
+    "觀望": "watch",
+    "減碼": "reduce",
+    "減倉": "reduce",
+    "賣出": "sell",
+    "強烈賣出": "strong_sell",
 }
 
 _OPERATION_ADVICE_TRANSLATIONS = {
-    "strong_buy": {"zh": "强烈买入", "en": "Strong Buy", "ko": "적극 매수"},
-    "buy": {"zh": "买入", "en": "Buy", "ko": "매수"},
-    "hold": {"zh": "持有", "en": "Hold", "ko": "보유"},
-    "watch": {"zh": "观望", "en": "Watch", "ko": "관망"},
-    "reduce": {"zh": "减仓", "en": "Reduce", "ko": "비중축소"},
-    "sell": {"zh": "卖出", "en": "Sell", "ko": "매도"},
-    "strong_sell": {"zh": "强烈卖出", "en": "Strong Sell", "ko": "적극 매도"},
+    "strong_buy": {"zh": "强烈买入", "zh-tw": "強烈買進", "en": "Strong Buy", "ko": "적극 매수"},
+    "buy": {"zh": "买入", "zh-tw": "買進", "en": "Buy", "ko": "매수"},
+    "hold": {"zh": "持有", "zh-tw": "持有", "en": "Hold", "ko": "보유"},
+    "watch": {"zh": "观望", "zh-tw": "觀望", "en": "Watch", "ko": "관망"},
+    "reduce": {"zh": "减仓", "zh-tw": "減碼", "en": "Reduce", "ko": "비중축소"},
+    "sell": {"zh": "卖出", "zh-tw": "賣出", "en": "Sell", "ko": "매도"},
+    "strong_sell": {"zh": "强烈卖出", "zh-tw": "強烈賣出", "en": "Strong Sell", "ko": "적극 매도"},
 }
 
 _TREND_PREDICTION_CANONICAL_MAP = {
@@ -104,14 +130,28 @@ _TREND_PREDICTION_CANONICAL_MAP = {
     "횡보": "sideways",
     "하락": "bearish",
     "강한 하락": "strong_bearish",
+    # Traditional Chinese / Taiwan wording emitted by the model under zh-tw.
+    # 台股講「盤整」而非「震蕩」，但模型仍可能輸出「震盪」，兩者都要認得。
+    "強勢空頭": "strong_bearish",
+    "強烈看多": "strong_bullish",
+    "強勢多頭": "strong_bullish",
+    "多頭排列": "bullish",
+    "空頭排列": "bearish",
+    "弱勢多頭": "bullish",
+    "弱勢空頭": "bearish",
+    "盤整": "sideways",
+    "橫盤整理": "sideways",
+    "震盪": "sideways",
+    "震蕩": "sideways",
+    "強烈看空": "strong_bearish",
 }
 
 _TREND_PREDICTION_TRANSLATIONS = {
-    "strong_bullish": {"zh": "强烈看多", "en": "Strong Bullish", "ko": "강한 상승"},
-    "bullish": {"zh": "看多", "en": "Bullish", "ko": "상승"},
-    "sideways": {"zh": "震荡", "en": "Sideways", "ko": "횡보"},
-    "bearish": {"zh": "看空", "en": "Bearish", "ko": "하락"},
-    "strong_bearish": {"zh": "强烈看空", "en": "Strong Bearish", "ko": "강한 하락"},
+    "strong_bullish": {"zh": "强烈看多", "zh-tw": "強烈看多", "en": "Strong Bullish", "ko": "강한 상승"},
+    "bullish": {"zh": "看多", "zh-tw": "看多", "en": "Bullish", "ko": "상승"},
+    "sideways": {"zh": "震荡", "zh-tw": "盤整", "en": "Sideways", "ko": "횡보"},
+    "bearish": {"zh": "看空", "zh-tw": "看空", "en": "Bearish", "ko": "하락"},
+    "strong_bearish": {"zh": "强烈看空", "zh-tw": "強烈看空", "en": "Strong Bearish", "ko": "강한 하락"},
 }
 
 _CONFIDENCE_LEVEL_CANONICAL_MAP = {
@@ -128,9 +168,9 @@ _CONFIDENCE_LEVEL_CANONICAL_MAP = {
 }
 
 _CONFIDENCE_LEVEL_TRANSLATIONS = {
-    "high": {"zh": "高", "en": "High", "ko": "높음"},
-    "medium": {"zh": "中", "en": "Medium", "ko": "보통"},
-    "low": {"zh": "低", "en": "Low", "ko": "낮음"},
+    "high": {"zh": "高", "zh-tw": "高", "en": "High", "ko": "높음"},
+    "medium": {"zh": "中", "zh-tw": "中", "en": "Medium", "ko": "보통"},
+    "low": {"zh": "低", "zh-tw": "低", "en": "Low", "ko": "낮음"},
 }
 
 _STRATEGY_SIGNAL_CANONICAL_MAP = {
@@ -146,14 +186,21 @@ _STRATEGY_SIGNAL_CANONICAL_MAP = {
     "strong sell": "strong_sell",
     "strong_sell": "strong_sell",
     "强烈卖出": "strong_sell",
+    # Traditional Chinese / Taiwan wording emitted by the model under zh-tw.
+    "強烈買進": "strong_buy",
+    "強烈買入": "strong_buy",
+    "買進": "buy",
+    "買入": "buy",
+    "賣出": "sell",
+    "強烈賣出": "strong_sell",
 }
 
 _STRATEGY_SIGNAL_TRANSLATIONS = {
-    "strong_buy": {"zh": "强烈买入", "en": "Strong Buy", "ko": "적극 매수"},
-    "buy": {"zh": "买入", "en": "Buy", "ko": "매수"},
-    "hold": {"zh": "持有", "en": "Hold", "ko": "보유"},
-    "sell": {"zh": "卖出", "en": "Sell", "ko": "매도"},
-    "strong_sell": {"zh": "强烈卖出", "en": "Strong Sell", "ko": "적극 매도"},
+    "strong_buy": {"zh": "强烈买入", "zh-tw": "強烈買進", "en": "Strong Buy", "ko": "적극 매수"},
+    "buy": {"zh": "买入", "zh-tw": "買進", "en": "Buy", "ko": "매수"},
+    "hold": {"zh": "持有", "zh-tw": "持有", "en": "Hold", "ko": "보유"},
+    "sell": {"zh": "卖出", "zh-tw": "賣出", "en": "Sell", "ko": "매도"},
+    "strong_sell": {"zh": "强烈卖出", "zh-tw": "強烈賣出", "en": "Strong Sell", "ko": "적극 매도"},
 }
 
 _CONSENSUS_LEVEL_CANONICAL_MAP = {
@@ -167,13 +214,14 @@ _CONSENSUS_LEVEL_CANONICAL_MAP = {
     "证据不足": "insufficient",
     "Insufficient": "insufficient",
     "증거 부족": "insufficient",
+    "證據不足": "insufficient",
 }
 
 _CONSENSUS_LEVEL_TRANSLATIONS = {
-    "high": {"zh": "高", "en": "High", "ko": "높음"},
-    "medium": {"zh": "中", "en": "Medium", "ko": "보통"},
-    "low": {"zh": "低", "en": "Low", "ko": "낮음"},
-    "insufficient": {"zh": "证据不足", "en": "Insufficient", "ko": "증거 부족"},
+    "high": {"zh": "高", "zh-tw": "高", "en": "High", "ko": "높음"},
+    "medium": {"zh": "中", "zh-tw": "中", "en": "Medium", "ko": "보통"},
+    "low": {"zh": "低", "zh-tw": "低", "en": "Low", "ko": "낮음"},
+    "insufficient": {"zh": "证据不足", "zh-tw": "證據不足", "en": "Insufficient", "ko": "증거 부족"},
 }
 
 _CONFLICT_SEVERITY_CANONICAL_MAP = {
@@ -185,13 +233,14 @@ _CONFLICT_SEVERITY_CANONICAL_MAP = {
     "中": "medium",
     "high": "high",
     "高": "high",
+    "無": "none",
 }
 
 _CONFLICT_SEVERITY_TRANSLATIONS = {
-    "none": {"zh": "无", "en": "None", "ko": "없음"},
-    "low": {"zh": "低", "en": "Low", "ko": "낮음"},
-    "medium": {"zh": "中", "en": "Medium", "ko": "보통"},
-    "high": {"zh": "高", "en": "High", "ko": "높음"},
+    "none": {"zh": "无", "zh-tw": "無", "en": "None", "ko": "없음"},
+    "low": {"zh": "低", "zh-tw": "低", "en": "Low", "ko": "낮음"},
+    "medium": {"zh": "中", "zh-tw": "中", "en": "Medium", "ko": "보통"},
+    "high": {"zh": "高", "zh-tw": "高", "en": "High", "ko": "높음"},
 }
 
 _STRATEGY_SKILL_CANONICAL_MAP = {
@@ -240,24 +289,49 @@ _STRATEGY_SKILL_CANONICAL_MAP = {
     "wave theory": "wave_theory",
     "wave_theory": "wave_theory",
     "波浪理论": "wave_theory",
+    # Traditional Chinese / Taiwan wording emitted by the model under zh-tw.
+    # 每個策略同時收錄「直接繁體化」與「台灣慣用說法」兩種寫法，確保雙向可還原。
+    "預設多頭趨勢": "bull_trend",
+    "熱門題材": "hot_theme",
+    "熱點題材": "hot_theme",
+    "帶量突破": "volume_breakout",
+    "均線黃金交叉": "ma_golden_cross",
+    "均線金叉": "ma_golden_cross",
+    "成長品質": "growth_quality",
+    "成長質量": "growth_quality",
+    "底部帶量": "bottom_volume",
+    "箱型盤整": "box_oscillation",
+    "箱體震盪": "box_oscillation",
+    "纏論結構": "chan_theory",
+    "龍頭股戰法": "dragon_head",
+    "龍頭戰法": "dragon_head",
+    "情緒週期": "emotion_cycle",
+    "情緒周期": "emotion_cycle",
+    "事件驅動": "event_driven",
+    "預期重評價": "expectation_repricing",
+    "預期重估": "expectation_repricing",
+    "一陽三陰": "one_yang_three_yin",
+    "量縮回測": "shrink_pullback",
+    "縮量回踩": "shrink_pullback",
+    "波浪理論": "wave_theory",
 }
 
 _STRATEGY_SKILL_TRANSLATIONS = {
-    "bull_trend": {"zh": "默认多头趋势", "en": "Bull Trend", "ko": "기본 상승 추세"},
-    "hot_theme": {"zh": "热点题材", "en": "Hot Theme", "ko": "핫 테마"},
-    "volume_breakout": {"zh": "放量突破", "en": "Volume Breakout", "ko": "거래량 돌파"},
-    "ma_golden_cross": {"zh": "均线金叉", "en": "MA Golden Cross", "ko": "이평선 골든크로스"},
-    "growth_quality": {"zh": "成长质量", "en": "Growth Quality", "ko": "성장 품질"},
-    "bottom_volume": {"zh": "底部放量", "en": "Bottom Volume", "ko": "저점 거래량"},
-    "box_oscillation": {"zh": "箱体震荡", "en": "Box Oscillation", "ko": "박스권 등락"},
-    "chan_theory": {"zh": "缠论结构", "en": "Chan Theory", "ko": "찬 이론 구조"},
-    "dragon_head": {"zh": "龙头战法", "en": "Dragon Head", "ko": "대장주 전략"},
-    "emotion_cycle": {"zh": "情绪周期", "en": "Emotion Cycle", "ko": "심리 사이클"},
-    "event_driven": {"zh": "事件驱动", "en": "Event Driven", "ko": "이벤트 드리븐"},
-    "expectation_repricing": {"zh": "预期重估", "en": "Expectation Repricing", "ko": "기대 재평가"},
-    "one_yang_three_yin": {"zh": "一阳三阴", "en": "One Yang Three Yin", "ko": "일양삼음"},
-    "shrink_pullback": {"zh": "缩量回踩", "en": "Shrink Pullback", "ko": "거래량 축소 눌림"},
-    "wave_theory": {"zh": "波浪理论", "en": "Wave Theory", "ko": "파동 이론"},
+    "bull_trend": {"zh": "默认多头趋势", "zh-tw": "預設多頭趨勢", "en": "Bull Trend", "ko": "기본 상승 추세"},
+    "hot_theme": {"zh": "热点题材", "zh-tw": "熱門題材", "en": "Hot Theme", "ko": "핫 테마"},
+    "volume_breakout": {"zh": "放量突破", "zh-tw": "帶量突破", "en": "Volume Breakout", "ko": "거래량 돌파"},
+    "ma_golden_cross": {"zh": "均线金叉", "zh-tw": "均線黃金交叉", "en": "MA Golden Cross", "ko": "이평선 골든크로스"},
+    "growth_quality": {"zh": "成长质量", "zh-tw": "成長品質", "en": "Growth Quality", "ko": "성장 품질"},
+    "bottom_volume": {"zh": "底部放量", "zh-tw": "底部帶量", "en": "Bottom Volume", "ko": "저점 거래량"},
+    "box_oscillation": {"zh": "箱体震荡", "zh-tw": "箱型盤整", "en": "Box Oscillation", "ko": "박스권 등락"},
+    "chan_theory": {"zh": "缠论结构", "zh-tw": "纏論結構", "en": "Chan Theory", "ko": "찬 이론 구조"},
+    "dragon_head": {"zh": "龙头战法", "zh-tw": "龍頭股戰法", "en": "Dragon Head", "ko": "대장주 전략"},
+    "emotion_cycle": {"zh": "情绪周期", "zh-tw": "情緒週期", "en": "Emotion Cycle", "ko": "심리 사이클"},
+    "event_driven": {"zh": "事件驱动", "zh-tw": "事件驅動", "en": "Event Driven", "ko": "이벤트 드리븐"},
+    "expectation_repricing": {"zh": "预期重估", "zh-tw": "預期重評價", "en": "Expectation Repricing", "ko": "기대 재평가"},
+    "one_yang_three_yin": {"zh": "一阳三阴", "zh-tw": "一陽三陰", "en": "One Yang Three Yin", "ko": "일양삼음"},
+    "shrink_pullback": {"zh": "缩量回踩", "zh-tw": "量縮回測", "en": "Shrink Pullback", "ko": "거래량 축소 눌림"},
+    "wave_theory": {"zh": "波浪理论", "zh-tw": "波浪理論", "en": "Wave Theory", "ko": "파동 이론"},
 }
 
 _CHIP_HEALTH_CANONICAL_MAP = {
@@ -270,12 +344,14 @@ _CHIP_HEALTH_CANONICAL_MAP = {
     "양호": "healthy",
     "보통": "average",
     "주의": "caution",
+    # 台灣證券用語說「警戒」而非「警惕」。
+    "警戒": "caution",
 }
 
 _CHIP_HEALTH_TRANSLATIONS = {
-    "healthy": {"zh": "健康", "en": "Healthy", "ko": "양호"},
-    "average": {"zh": "一般", "en": "Average", "ko": "보통"},
-    "caution": {"zh": "警惕", "en": "Caution", "ko": "주의"},
+    "healthy": {"zh": "健康", "zh-tw": "健康", "en": "Healthy", "ko": "양호"},
+    "average": {"zh": "一般", "zh-tw": "一般", "en": "Average", "ko": "보통"},
+    "caution": {"zh": "警惕", "zh-tw": "警戒", "en": "Caution", "ko": "주의"},
 }
 
 _BIAS_STATUS_CANONICAL_MAP = {
@@ -290,34 +366,40 @@ _BIAS_STATUS_CANONICAL_MAP = {
     "안전": "safe",
     "경계": "caution",
     "위험": "danger",
+    "危險": "danger",
 }
 
 _BIAS_STATUS_TRANSLATIONS = {
-    "safe": {"zh": "安全", "en": "Safe", "ko": "안전"},
-    "caution": {"zh": "警戒", "en": "Caution", "ko": "경계"},
-    "danger": {"zh": "危险", "en": "Danger", "ko": "위험"},
+    "safe": {"zh": "安全", "zh-tw": "安全", "en": "Safe", "ko": "안전"},
+    "caution": {"zh": "警戒", "zh-tw": "警戒", "en": "Caution", "ko": "경계"},
+    "danger": {"zh": "危险", "zh-tw": "危險", "en": "Danger", "ko": "위험"},
 }
 
 _PLACEHOLDER_BY_LANGUAGE = {
     "zh": "待补充",
+    "zh-tw": "待補充",
     "en": "TBD",
     "ko": "미정",
 }
 
 _UNKNOWN_BY_LANGUAGE = {
     "zh": "未知",
+    "zh-tw": "未知",
     "en": "Unknown",
     "ko": "알 수 없음",
 }
 
 _NO_DATA_BY_LANGUAGE = {
     "zh": "数据缺失",
+    # 台灣說「資料」不說「數據缺失」。
+    "zh-tw": "資料缺失",
     "en": "Data unavailable",
     "ko": "데이터 없음",
 }
 
 _CHIP_UNAVAILABLE_BY_LANGUAGE = {
     "zh": "筹码分布未启用或数据源暂不可用，未纳入筹码判断。",
+    "zh-tw": "籌碼分布未啟用或資料來源暫時無法使用，未納入籌碼判斷。",
     "en": "Chip distribution is disabled or temporarily unavailable; chip signals were not used.",
     "ko": "매물대가 비활성화되었거나 데이터 소스를 일시적으로 사용할 수 없어 매물대 신호를 반영하지 않았습니다.",
 }
@@ -334,11 +416,17 @@ _CHIP_PLACEHOLDER_EXACT = {
     "未知",
     "暂无",
     "待补充",
+    # Traditional Chinese placeholders produced under zh-tw.
+    "資料缺失",
+    "暫無",
+    "待補充",
 }
 
 _CHIP_PLACEHOLDER_HINTS = (
     "数据缺失",
     "无法判断",
+    "資料缺失",
+    "無法判斷",
     "data unavailable",
     "unavailable",
     "not available",
@@ -355,6 +443,7 @@ _CHIP_UNAVAILABLE_REASON_KEYS = (
 
 _GENERIC_STOCK_NAME_BY_LANGUAGE = {
     "zh": "待确认股票",
+    "zh-tw": "待確認股票",
     "en": "Unnamed Stock",
     "ko": "미확인 종목",
 }
@@ -493,6 +582,143 @@ _REPORT_LABELS: Dict[str, Dict[str, str]] = {
         "strategy_supporting_skills_label": "支持策略",
         "strategy_opposing_skills_label": "反方策略",
         "strategy_invalid_opinions_label": "另有 {count} 个策略解析失败",
+    },
+    # Traditional Chinese for Taiwan.  這不是簡繁字元轉換：欄位名採台灣證券業
+    # 慣用語（成交值／週轉率／停損／部位／類股／殖利率／年增率／訊號…），
+    # 與 ``zh`` 條目一一對應但用詞獨立維護。
+    "zh-tw": {
+        "dashboard_title": "決策儀表板",
+        "brief_title": "決策簡報",
+        "analyzed_prefix": "共分析",
+        "stock_unit": "檔股票",
+        "stock_unit_compact": "檔",
+        "buy_label": "買進",
+        "watch_label": "觀望",
+        "sell_label": "賣出",
+        "summary_heading": "分析結果摘要",
+        "info_heading": "重要資訊速覽",
+        "sentiment_summary_label": "市場情緒",
+        "earnings_outlook_label": "獲利展望",
+        "risk_alerts_label": "風險警示",
+        "positive_catalysts_label": "利多催化",
+        "latest_news_label": "最新動態",
+        "core_conclusion_heading": "核心結論",
+        "one_sentence_label": "一句話決策",
+        "time_sensitivity_label": "時效性",
+        "default_time_sensitivity": "本週內",
+        "position_status_label": "持股狀況",
+        "action_advice_label": "操作建議",
+        "no_position_label": "空手者",
+        "has_position_label": "持股者",
+        "continue_holding": "續抱",
+        "market_snapshot_heading": "當日行情",
+        "close_label": "收盤",
+        "prev_close_label": "昨收",
+        "open_label": "開盤",
+        "high_label": "最高",
+        "low_label": "最低",
+        "change_pct_label": "漲跌幅",
+        "change_amount_label": "漲跌",
+        "amplitude_label": "振幅",
+        "volume_label": "成交量",
+        "amount_label": "成交值",
+        "current_price_label": "現價",
+        "volume_ratio_label": "量比",
+        "turnover_rate_label": "週轉率",
+        "source_label": "行情來源",
+        "data_perspective_heading": "數據透視",
+        "ma_alignment_label": "均線排列",
+        "bullish_alignment_label": "多頭排列",
+        "yes_label": "是",
+        "no_label": "否",
+        "none_label": "無",
+        "trend_strength_label": "趨勢強度",
+        "price_metrics_label": "價格指標",
+        "ma5_label": "MA5",
+        "ma10_label": "MA10",
+        "ma20_label": "MA20",
+        "bias_ma5_label": "乖離率(MA5)",
+        "support_level_label": "支撐價位",
+        "resistance_level_label": "壓力價位",
+        "chip_label": "籌碼",
+        "phase_decision_heading": "盤中決策護欄",
+        "action_window_label": "行動時機",
+        "immediate_action_label": "當前動作",
+        "watch_conditions_label": "觀察條件",
+        "next_check_time_label": "下次檢視",
+        "confidence_reason_label": "信心度理由",
+        "data_limitations_label": "資料限制",
+        "battle_plan_heading": "作戰計畫",
+        "ideal_buy_label": "理想買進點",
+        "secondary_buy_label": "次佳買進點",
+        "stop_loss_label": "停損價",
+        "take_profit_label": "目標價",
+        "suggested_position_label": "部位建議",
+        "entry_plan_label": "進場策略",
+        "risk_control_label": "風控策略",
+        "checklist_heading": "檢查清單",
+        "failed_checks_heading": "未通過檢查項目",
+        "history_compare_heading": "歷史訊號比較",
+        "time_label": "時間",
+        "score_label": "評分",
+        "advice_label": "建議",
+        "trend_label": "趨勢",
+        "generated_at_label": "報告產生時間",
+        "report_time_label": "產生時間",
+        "no_results": "無分析結果",
+        "report_title": "股票分析報告",
+        "avg_score_label": "平均分",
+        "action_points_heading": "操作價位",
+        "position_advice_heading": "持股建議",
+        "analysis_model_label": "分析模型",
+        "not_investment_advice": "AI產生，僅供參考，不構成投資建議",
+        "details_report_hint": "詳細報告請見",
+        "financial_summary_heading": "財務摘要",
+        "report_date_label": "財報期別",
+        "revenue_label": "營業收入",
+        "net_profit_label": "歸屬母公司淨利",
+        "operating_cash_flow_label": "營業現金流量",
+        "roe_label": "ROE",
+        "revenue_yoy_label": "營收年增率",
+        "net_profit_yoy_label": "淨利年增率",
+        "gross_margin_label": "毛利率",
+        "shareholder_return_heading": "股東回饋",
+        "ttm_cash_dividend_label": "近12月每股現金股利(稅前)",
+        "ttm_event_count_label": "近12月配息次數",
+        "ttm_dividend_yield_label": "TTM 現金殖利率",
+        "latest_ex_dividend_label": "最近除息日",
+        "institutional_flow_heading": "三大法人動向",
+        "institutional_flow_note": "正數=買超，負數=賣超；單位為股。",
+        "inst_foreign_label": "外資",
+        "inst_trust_label": "投信",
+        "inst_dealer_label": "自營商",
+        "inst_total_label": "三大法人合計",
+        "related_boards_heading": "相關類股",
+        "industry_boards_heading": "產業類股",
+        "concept_boards_heading": "題材類股",
+        "board_name_label": "類股",
+        "board_type_label": "類型",
+        "board_status_label": "類股表現",
+        "board_change_pct_label": "類股漲跌幅",
+        "leading_board_label": "領漲",
+        "lagging_board_label": "領跌",
+        "signal_attribution_heading": "訊號歸因分析",
+        "attribution_weights_label": "歸因權重",
+        "technical_indicators_label": "技術指標",
+        "news_sentiment_label": "新聞情緒",
+        "fundamentals_label": "基本面",
+        "market_conditions_label": "市場環境",
+        "strongest_bullish_signal_label": "最強看多訊號",
+        "strongest_bearish_signal_label": "最強看空訊號",
+        "strategy_synthesis_heading": "多策略綜合",
+        "strategy_final_signal_label": "綜合訊號",
+        "strategy_consensus_level_label": "共識度",
+        "strategy_conflict_label": "衝突",
+        "strategy_confidence_label": "信心度",
+        "strategy_summary_label": "綜合說明",
+        "strategy_supporting_skills_label": "支持策略",
+        "strategy_opposing_skills_label": "反方策略",
+        "strategy_invalid_opinions_label": "另有 {count} 個策略解析失敗",
     },
     "en": {
         "dashboard_title": "Decision Dashboard",
@@ -826,30 +1052,61 @@ def is_supported_report_language_value(value: Optional[str]) -> bool:
     return candidate in SUPPORTED_REPORT_LANGUAGES or candidate in _REPORT_LANGUAGE_ALIASES
 
 
+def is_chinese_report_language(value: Optional[str]) -> bool:
+    """Return whether the language renders Chinese output (zh or zh-tw)."""
+    return normalize_report_language(value) in ("zh", "zh-tw")
+
+
+def choose_report_text(language: Optional[str], *, zh: str, zh_tw: str, other: str) -> str:
+    """Pick inline report copy by language family.
+
+    ``zh`` 與 ``zh-tw`` 是不同字形與用詞的中文；其餘語言（en/ko）沿用既有
+    行為，取 ``other``（現況即英文）。
+    """
+    normalized = normalize_report_language(language)
+    if normalized == "zh-tw":
+        return zh_tw
+    if normalized == "zh":
+        return zh
+    return other
+
+
+def _lookup_by_language(table: Dict[str, Any], language: str) -> Any:
+    """Look up a language-keyed table, degrading zh-tw to zh when absent.
+
+    未來新增翻譯字典時若忘記補 zh-tw，報告會退回簡體而不是在執行期炸掉。
+    """
+    if language in table:
+        return table[language]
+    if language == "zh-tw":
+        return table["zh"]
+    return table[normalize_report_language(None)]
+
+
 def get_report_labels(language: Optional[str]) -> Dict[str, str]:
     """Return UI copy for the selected report language."""
     normalized = normalize_report_language(language)
-    return _REPORT_LABELS[normalized]
+    return _lookup_by_language(_REPORT_LABELS, normalized)
 
 
 def get_placeholder_text(language: Optional[str]) -> str:
     """Return placeholder text for missing localized content."""
-    return _PLACEHOLDER_BY_LANGUAGE[normalize_report_language(language)]
+    return _lookup_by_language(_PLACEHOLDER_BY_LANGUAGE, normalize_report_language(language))
 
 
 def get_unknown_text(language: Optional[str]) -> str:
     """Return localized unknown text."""
-    return _UNKNOWN_BY_LANGUAGE[normalize_report_language(language)]
+    return _lookup_by_language(_UNKNOWN_BY_LANGUAGE, normalize_report_language(language))
 
 
 def get_no_data_text(language: Optional[str]) -> str:
     """Return localized data unavailable text."""
-    return _NO_DATA_BY_LANGUAGE[normalize_report_language(language)]
+    return _lookup_by_language(_NO_DATA_BY_LANGUAGE, normalize_report_language(language))
 
 
 def get_chip_unavailable_text(language: Optional[str]) -> str:
     """Return the localized one-line chip distribution fallback text."""
-    return _CHIP_UNAVAILABLE_BY_LANGUAGE[normalize_report_language(language)]
+    return _lookup_by_language(_CHIP_UNAVAILABLE_BY_LANGUAGE, normalize_report_language(language))
 
 
 def _normalize_lookup_key(value: Any) -> str:
@@ -931,7 +1188,7 @@ def _is_placeholder_stock_name(value: Any, code: Any = None) -> bool:
     lowered = text.lower()
     if lowered in {"n/a", "na", "none", "null", "unknown"}:
         return True
-    if text in {"-", "—", "未知", "待补充"}:
+    if text in {"-", "—", "未知", "待补充", "待補充"}:
         return True
 
     code_text = str(code or "").strip()
@@ -955,7 +1212,7 @@ def _translate_from_map(
 
     canonical = _canonicalize_lookup_value(raw_text, canonical_map)
     if canonical:
-        return translations[canonical][normalized_language]
+        return _lookup_by_language(translations[canonical], normalized_language)
     return raw_text
 
 
@@ -977,6 +1234,14 @@ def localize_trend_prediction(value: Any, language: Optional[str]) -> str:
         return raw_text
     if normalized_language == "zh":
         if re.search(r"[\u4e00-\u9fff]", raw_text):
+            return raw_text
+    elif normalized_language == "zh-tw":
+        # zh-tw also keeps free-form Chinese wording from the model, but a
+        # recognized trend word is still normalized so Simplified or non-Taiwan
+        # wording is rewritten into the Taiwan market term.
+        if not _canonicalize_lookup_value(raw_text, _TREND_PREDICTION_CANONICAL_MAP) and re.search(
+            r"[\u4e00-\u9fff]", raw_text
+        ):
             return raw_text
     return _translate_from_map(
         value,
@@ -1083,21 +1348,25 @@ def localize_strategy_conflict_description(conflict_type: Any, language: Optiona
     translations = {
         "directional_opposition": {
             "zh": "策略方向出现对立：部分策略看多，部分策略看空，综合结论需要降低确定性。",
+            "zh-tw": "策略方向出現對立：部分策略看多，部分策略看空，綜合結論需要降低確定性。",
             "en": "Strategy directions diverge: some strategies are bullish while others are bearish, so conviction should be reduced.",
             "ko": "전략 방향이 엇갈립니다. 일부 전략은 상승을, 일부 전략은 하락을 보며 확신도를 낮춰야 합니다.",
         },
         "wide_score_dispersion": {
             "zh": "策略信号分数分布较宽，说明多策略对行情结构存在明显分歧。",
+            "zh-tw": "策略訊號分數分布較廣，顯示多策略對盤勢結構存在明顯分歧。",
             "en": "Strategy signal scores are widely dispersed, indicating meaningful disagreement on market structure.",
             "ko": "전략 신호 점수 분포가 넓어 시장 구조에 대한 전략 간 이견이 큽니다.",
         },
         "high_confidence_dissent": {
             "zh": "存在高置信少数派策略与综合信号明显不一致，应保留反方观点。",
+            "zh-tw": "有高信心度的少數派策略與綜合訊號明顯不一致，應保留反方觀點。",
             "en": "A high-confidence minority strategy materially disagrees with the final signal and should be kept as a dissenting view.",
             "ko": "높은 확신도의 소수 전략이 종합 신호와 크게 달라 반대 관점으로 보존해야 합니다.",
         },
         "adjustment_contradiction": {
             "zh": "策略加减分方向相互矛盾，说明不同策略对同一标的的边际评分分歧较大。",
+            "zh-tw": "策略加減分方向互相矛盾，顯示不同策略對同一標的的邊際評分分歧較大。",
             "en": "Strategy score adjustments contradict each other, showing large disagreement in marginal scoring.",
             "ko": "전략별 점수 조정 방향이 서로 충돌해 동일 종목의 한계 평가 차이가 큽니다.",
         },
@@ -1183,6 +1452,12 @@ def localize_strategy_synthesis_summary(strategy_synthesis: Any, language: Optio
         else:
             base = f"{opinion_count}개 전략의 종합 판단: 종합 신호는 {final_signal}, 공감도는 {consensus_level}, 감지된 전략 충돌은 없습니다."
         return base
+    if lang == "zh-tw":
+        if conflict_count:
+            base = f"來自 {opinion_count} 個策略的綜合判斷：綜合訊號為{final_signal}，共識度為{consensus_level}，衝突強度為{conflict_severity}。"
+        else:
+            base = f"來自 {opinion_count} 個策略的綜合判斷：綜合訊號為{final_signal}，共識度為{consensus_level}，未偵測到策略衝突。"
+        return base
     if conflict_count:
         base = f"来自 {opinion_count} 个策略的综合判断：综合信号为{final_signal}，共识度为{consensus_level}，冲突强度为{conflict_severity}。"
     else:
@@ -1263,19 +1538,23 @@ def infer_decision_type_from_advice(value: Any, default: str = "hold") -> str:
 def get_signal_level(advice: Any, score: Any, language: Optional[str]) -> tuple[str, str, str]:
     """Return localized signal text, emoji, and stable color tag."""
     normalized_language = normalize_report_language(language)
+
+    def advice_text(key: str) -> str:
+        return _lookup_by_language(_OPERATION_ADVICE_TRANSLATIONS[key], normalized_language)
+
     canonical = _canonicalize_lookup_value(advice, _OPERATION_ADVICE_CANONICAL_MAP)
     if canonical == "strong_buy":
-        return (_OPERATION_ADVICE_TRANSLATIONS["strong_buy"][normalized_language], "💚", "strong_buy")
+        return (advice_text("strong_buy"), "💚", "strong_buy")
     if canonical == "buy":
-        return (_OPERATION_ADVICE_TRANSLATIONS["buy"][normalized_language], "🟢", "buy")
+        return (advice_text("buy"), "🟢", "buy")
     if canonical == "hold":
-        return (_OPERATION_ADVICE_TRANSLATIONS["hold"][normalized_language], "🟡", "hold")
+        return (advice_text("hold"), "🟡", "hold")
     if canonical == "watch":
-        return (_OPERATION_ADVICE_TRANSLATIONS["watch"][normalized_language], "⚪", "watch")
+        return (advice_text("watch"), "⚪", "watch")
     if canonical == "reduce":
-        return (_OPERATION_ADVICE_TRANSLATIONS["reduce"][normalized_language], "🟠", "reduce")
+        return (advice_text("reduce"), "🟠", "reduce")
     if canonical in {"sell", "strong_sell"}:
-        return (_OPERATION_ADVICE_TRANSLATIONS["sell"][normalized_language], "🔴", "sell")
+        return (advice_text("sell"), "🔴", "sell")
 
     try:
         numeric_score = int(float(score))
@@ -1284,14 +1563,14 @@ def get_signal_level(advice: Any, score: Any, language: Optional[str]) -> tuple[
 
     score_signal = signal_key_for_score(numeric_score)
     if score_signal == "strong_buy":
-        return (_OPERATION_ADVICE_TRANSLATIONS["strong_buy"][normalized_language], "💚", "strong_buy")
+        return (advice_text("strong_buy"), "💚", "strong_buy")
     if score_signal == "buy":
-        return (_OPERATION_ADVICE_TRANSLATIONS["buy"][normalized_language], "🟢", "buy")
+        return (advice_text("buy"), "🟢", "buy")
     if score_signal == "watch":
-        return (_OPERATION_ADVICE_TRANSLATIONS["watch"][normalized_language], "⚪", "watch")
+        return (advice_text("watch"), "⚪", "watch")
     if score_signal == "reduce":
-        return (_OPERATION_ADVICE_TRANSLATIONS["reduce"][normalized_language], "🟠", "reduce")
-    return (_OPERATION_ADVICE_TRANSLATIONS["sell"][normalized_language], "🔴", "sell")
+        return (advice_text("reduce"), "🟠", "reduce")
+    return (advice_text("sell"), "🔴", "sell")
 
 
 def get_localized_stock_name(value: Any, code: Any, language: Optional[str]) -> str:
@@ -1299,7 +1578,7 @@ def get_localized_stock_name(value: Any, code: Any, language: Optional[str]) -> 
     raw_text = str(value or "").strip()
     if not _is_placeholder_stock_name(raw_text, code):
         return raw_text
-    return _GENERIC_STOCK_NAME_BY_LANGUAGE[normalize_report_language(language)]
+    return _lookup_by_language(_GENERIC_STOCK_NAME_BY_LANGUAGE, normalize_report_language(language))
 
 
 def get_sentiment_label(score: int, language: Optional[str]) -> str:
@@ -1326,6 +1605,17 @@ def get_sentiment_label(score: int, language: Optional[str]) -> str:
         if score >= 20:
             return "비관"
         return "매우 비관"
+
+    if normalized == "zh-tw":
+        if score >= 80:
+            return "極度樂觀"
+        if score >= 60:
+            return "樂觀"
+        if score >= 40:
+            return "中性"
+        if score >= 20:
+            return "悲觀"
+        return "極度悲觀"
 
     if score >= 80:
         return "极度乐观"
