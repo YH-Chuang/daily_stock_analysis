@@ -2734,7 +2734,6 @@ class SearchService:
         key: str,
         *,
         deadline: Optional[float] = None,
-        max_wait_seconds: Optional[float] = None,
     ) -> Tuple[Optional['SearchResponse'], bool, Optional[threading.Event], bool]:
         """Return a cache hit or exclusive ownership of one cache fill.
 
@@ -2751,12 +2750,6 @@ class SearchService:
                 raise RuntimeError("搜索缓存请求合并状态异常")
             waited = True
             remaining = None if deadline is None else deadline - time.monotonic()
-            if remaining is not None and max_wait_seconds is not None:
-                # deadline 由 monotonic() + 预算算出。当时钟精度粗于这中间的耗时
-                # （Windows 上是常态，两次读数相同），大浮点数相加再相减的舍入误差
-                # 会让 remaining 比调用方预算多出约 1e-11 秒。夹住以保证「交给下游的
-                # 等待时间绝不超过调用方预算」这一契约在所有平台上严格成立。
-                remaining = min(remaining, max_wait_seconds)
             if remaining is not None and remaining <= 0:
                 raise TimeoutError("题材新闻搜索等待超过调用截止时间")
             if remaining is None:
@@ -3974,13 +3967,12 @@ class SearchService:
         cached, cache_owner, cache_event, _waited = self._get_cached_or_wait_for_reservation(
             cache_key,
             deadline=deadline,
-            max_wait_seconds=wait_seconds,
         )
         if cached is not None:
             return cached
 
         try:
-            remaining = min(deadline - time.monotonic(), wait_seconds)
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError("题材新闻搜索等待超过调用截止时间")
             response = _call_topic_news_in_subprocess(
