@@ -5,7 +5,9 @@
 ``data_provider/tw_institutional_fetcher.py``、``data_provider/tw_index_fetcher.py``
 同一設計典範：整個市場單日表快取後再依股票代碼過濾、共用節流器、
 CircuitBreaker 熔斷、cache-stampede guard、fail-open 契約。本模組只負責
-擷取、解析、快取與 fail-open —— 尚未接進分析主流程（由呼叫端決定何時使用）。
+擷取、解析、快取與 fail-open —— 已由 ``src/analyzer.py``（.TW / .TWO 代碼分支）
+於分析主流程中呼叫 ``get_valuation`` / ``get_margin`` 並接入 prompt，任一呼叫失
+敗皆 fail-open、不中斷報告生成。
 
 資料來源（政府開放資料，政府資料開放授權條款第 1 版 / OGDL v1，商用可、免金鑰）：
   - 上市 TWSE 「個股日本益比、殖利率及股價淨值比」，OpenAPI
