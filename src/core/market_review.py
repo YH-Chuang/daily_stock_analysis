@@ -5,7 +5,7 @@
 ===================================
 
 职责：
-1. 根据 MARKET_REVIEW_REGION 配置选择市场区域（cn / hk / us / jp / kr / both）
+1. 根据 MARKET_REVIEW_REGION 配置选择市场区域（cn / hk / us / jp / kr / tw / both）
 2. 执行大盘复盘分析并生成复盘报告
 3. 保存和发送复盘报告
 """
@@ -47,6 +47,7 @@ _MARKET_REVIEW_MARKETS = (
     ('us', 'us_title', '美股'),
     ('jp', 'jp_title', '日股'),
     ('kr', 'kr_title', '韩股'),
+    ('tw', 'tw_title', '台股'),
 )
 _MARKET_REVIEW_REGION_ORDER = MARKET_REVIEW_REGION_ORDER
 
@@ -123,6 +124,7 @@ def _get_market_review_text(language: str) -> dict[str, str]:
             "hk_title": "# HK Market Recap",
             "jp_title": "# Japan Market Recap",
             "kr_title": "# Korea Market Recap",
+            "tw_title": "# Taiwan Market Recap",
             "separator": "> Next market recap follows",
         }
     if normalized == "ko":
@@ -134,6 +136,7 @@ def _get_market_review_text(language: str) -> dict[str, str]:
             "hk_title": "# 홍콩 시황 리뷰",
             "jp_title": "# 일본 시황 리뷰",
             "kr_title": "# 한국 시황 리뷰",
+            "tw_title": "# 대만 시황 리뷰",
             "separator": "> 다음 시장 시황 리뷰",
         }
     return {
@@ -144,6 +147,7 @@ def _get_market_review_text(language: str) -> dict[str, str]:
         "hk_title": "# 港股大盘复盘",
         "jp_title": "# 日股大盘复盘",
         "kr_title": "# 韩股大盘复盘",
+        "tw_title": "# 台股大盤復盤",
         "separator": "> 以下为下一市场大盘复盘",
     }
 
@@ -299,16 +303,23 @@ def run_market_review(
             }
         
         if review_report:
+            # 只跑台股單一市場時，外層標題也用繁體，避免整份報告簡繁混雜；
+            # 多市場合併或其他市場維持既有 root_title 不變。
+            root_title = review_text["root_title"]
+            if run_markets == ["tw"] and str(
+                getattr(runtime_config, "report_language", "zh")
+            ).lower().startswith("zh"):
+                root_title = "# 🎯 大盤復盤"
             market_review_payload = _build_combined_market_review_payload(
                 review_report=review_report,
                 payloads=market_review_payloads,
                 region=persist_region,
                 language=getattr(runtime_config, "report_language", "zh"),
-                root_title=review_text["root_title"],
+                root_title=root_title,
             )
             markdown_report = _render_market_review_payload_markdown(
                 market_review_payload,
-                wrapper_title=review_text["root_title"],
+                wrapper_title=root_title,
             )
             merge_markdown_report = _render_market_review_merge_markdown(
                 market_review_payload,

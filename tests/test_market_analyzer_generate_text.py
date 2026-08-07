@@ -2899,6 +2899,7 @@ class TestMarketAnalyzerBypassFix:
         [
             ("jp", "JP_PROFILE", "N225", "Nikkei 225", "Japan Market Recap", "今日日股市场整体呈现"),
             ("kr", "KR_PROFILE", "KS11", "KOSPI", "Korea Market Recap", "今日韩股市场整体呈现"),
+            ("tw", "TW_PROFILE", "TWII", "台湾加权指数", "Taiwan Market Recap", "今日台股市场整体呈现"),
         ],
     )
     def test_generate_template_review_uses_jp_kr_labels_for_no_llm_fallback(
@@ -2906,7 +2907,7 @@ class TestMarketAnalyzerBypassFix:
     ):
         import src.core.market_profile as market_profile
         from src.core.market_strategy import get_market_strategy_blueprint
-        from src.market_analyzer import MarketOverview, MarketIndex
+        from src.market_analyzer import MarketAnalyzer, MarketOverview, MarketIndex
 
         ma = self._make_market_analyzer_with_mock_generate_text(return_value=None)
         ma.region = region
@@ -2925,15 +2926,17 @@ class TestMarketAnalyzerBypassFix:
             ],
         )
 
-        ma.config.report_language = "en"
-        english_result = ma.generate_market_review(overview, [])
-        assert f"## 2026-03-05 {english_title}" in english_result
-        assert "A-share Market Recap" not in english_result
+        # tw 的補充區塊會打 TPEx 真實網路，這裡與其他既有 region 一樣 mock 掉（不影響斷言）。
+        with patch.object(MarketAnalyzer, "_build_tw_supplement_block", return_value=""):
+            ma.config.report_language = "en"
+            english_result = ma.generate_market_review(overview, [])
+            assert f"## 2026-03-05 {english_title}" in english_result
+            assert "A-share Market Recap" not in english_result
 
-        ma.config.report_language = "zh"
-        zh_result = ma.generate_market_review(overview, [])
-        assert zh_label in zh_result
-        assert "今日A股市场整体呈现" not in zh_result
+            ma.config.report_language = "zh"
+            zh_result = ma.generate_market_review(overview, [])
+            assert zh_label in zh_result
+            assert "今日A股市场整体呈现" not in zh_result
 
     def test_inject_data_into_review_matches_english_headings(self):
         from src.market_analyzer import MarketOverview, MarketIndex

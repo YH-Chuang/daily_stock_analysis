@@ -28,11 +28,24 @@ def _make_mock_hist(close: float = 100.0, prev_close: float = 98.0) -> pd.DataFr
 
 
 def _make_mock_yf(hist_df: pd.DataFrame):
-    mock_ticker = MagicMock()
-    mock_ticker.history.return_value = hist_df
+    """构造模拟的 yf 模块，download() 对所有请求代码返回同一份 DataFrame（MultiIndex 列）"""
+    def download(tickers, **kwargs):
+        if hist_df.empty or not list(tickers):
+            return pd.DataFrame()
+        return pd.concat({symbol: hist_df for symbol in tickers}, axis=1)
+
     mock_yf = MagicMock()
-    mock_yf.Ticker.return_value = mock_ticker
+    mock_yf.download.side_effect = download
     return mock_yf
+
+
+def _downloaded_tickers(mock_yf) -> list:
+    """收集 yf.download() 收到的全部代码"""
+    tickers = []
+    for call in mock_yf.download.call_args_list:
+        value = call.kwargs.get('tickers', call.args[0] if call.args else [])
+        tickers.extend(value)
+    return tickers
 
 
 class TestJpKrIndexMappings(unittest.TestCase):
@@ -45,16 +58,14 @@ class TestJpKrIndexMappings(unittest.TestCase):
 
         self.fetcher._get_jp_main_indices(mock_yf)
 
-        ticker_calls = [call.args[0] for call in mock_yf.Ticker.call_args_list]
-        self.assertEqual(ticker_calls, ['^N225', '^TOPX'])
+        self.assertEqual(_downloaded_tickers(mock_yf), ['^N225', '^TOPX'])
 
     def test_kr_indices_use_expected_yahoo_symbols(self):
         mock_yf = _make_mock_yf(pd.DataFrame())
 
         self.fetcher._get_kr_main_indices(mock_yf)
 
-        ticker_calls = [call.args[0] for call in mock_yf.Ticker.call_args_list]
-        self.assertEqual(ticker_calls, ['^KS11', '^KQ11'])
+        self.assertEqual(_downloaded_tickers(mock_yf), ['^KS11', '^KQ11'])
 
     def test_jp_indices_return_expected_codes_when_data_available(self):
         result = self.fetcher._get_jp_main_indices(_make_mock_yf(_make_mock_hist()))

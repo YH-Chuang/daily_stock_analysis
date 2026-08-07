@@ -18,7 +18,7 @@ import csv
 import logging
 from datetime import datetime
 from io import StringIO
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -305,48 +305,108 @@ class YfinanceFetcher(BaseFetcher):
 
         return df
 
-    def _fetch_yf_ticker_data(self, yf, yf_code: str, name: str, return_code: str) -> Optional[Dict[str, Any]]:
+    @staticmethod
+    def _extract_symbol_frame(df: pd.DataFrame, yf_symbol: str, allow_flat: bool) -> Optional[pd.DataFrame]:
+        """从 yf.download 的返回结果中切出单个代码的行情子表。
+
+        yf.download 只传一个代码时返回扁平列（Open/High/Low/Close/Volume），
+        传多个代码时返回 MultiIndex 列；MultiIndex 的层级顺序取决于 group_by
+        参数（('ticker', 'field') 或 ('field', 'ticker')），两种都要能取到。
+
+        Args:
+            df: yf.download 的返回结果
+            yf_symbol: 要切出的 yfinance 代码
+            allow_flat: 是否允许把扁平列整表当作该代码的数据。仅当本次只请求
+                一个代码时为 True，避免多代码场景下把同一份数据错配给多个代码。
+
+        Returns:
+            该代码的行情子表；结构无法识别或该代码不存在时返回 None
         """
-        通过 yfinance 拉取单个指数/股票的行情数据。
+        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+            return None
+
+        if isinstance(df.columns, pd.MultiIndex):
+            if yf_symbol in df.columns.get_level_values(0):
+                sub = df.xs(yf_symbol, axis=1, level=0)
+            elif yf_symbol in df.columns.get_level_values(1):
+                sub = df.xs(yf_symbol, axis=1, level=1)
+            else:
+                return None
+        elif allow_flat:
+            # 单个代码：扁平列结构，直接使用整表
+            sub = df
+        else:
+            return None
+
+        if sub.empty or 'Close' not in sub.columns:
+            return None
+        # 多代码批量下载时各市场交易日历不同，缺失交易日会补 NaN，需要剔除
+        sub = sub[sub['Close'].notna()]
+        return sub if not sub.empty else None
+
+    def _fetch_yf_batch_data(self, yf, symbol_map: Dict[str, Tuple[str, str]]) -> List[Dict[str, Any]]:
+        """批量拉取多个指数行情。symbol_map: {return_code: (yf_symbol, name)}。
+
+        相比逐个 yf.Ticker().history()，yf.download() 单次请求 + 多线程，
+        请求数更少、更不容易触发 Yahoo 限流。单个代码无数据时跳过该代码，
+        不影响其余代码（保持原有 fail-open 行为）。
 
         Args:
             yf: yfinance 模块引用
-            yf_code: yfinance 使用的代码（如 '000001.SS'、'^GSPC'）
-            name: 指数显示名称
-            return_code: 写入结果 dict 的 code 字段（如 'sh000001'、'SPX'）
+            symbol_map: {返回给调用方的 code: (yfinance 代码, 显示名称)}
 
         Returns:
-            行情字典，失败时返回 None
+            行情字典列表，顺序与 symbol_map 一致；全部失败时返回空列表
         """
-        ticker = yf.Ticker(yf_code)
-        # 取近两日数据以计算涨跌幅
-        hist = ticker.history(period='2d')
-        if hist.empty:
-            return None
-        today_row = hist.iloc[-1]
-        prev_row = hist.iloc[-2] if len(hist) > 1 else today_row
-        price = float(today_row['Close'])
-        prev_close = float(prev_row['Close'])
-        change = price - prev_close
-        change_pct = (change / prev_close) * 100 if prev_close else 0
-        high = float(today_row['High'])
-        low = float(today_row['Low'])
-        # 振幅 = (最高 - 最低) / 昨收 * 100
-        amplitude = ((high - low) / prev_close * 100) if prev_close else 0
-        return {
-            'code': return_code,
-            'name': name,
-            'current': price,
-            'change': change,
-            'change_pct': change_pct,
-            'open': float(today_row['Open']),
-            'high': high,
-            'low': low,
-            'prev_close': prev_close,
-            'volume': float(today_row['Volume']),
-            'amount': 0.0,  # Yahoo Finance 不提供准确成交额
-            'amplitude': amplitude,
-        }
+        results: List[Dict[str, Any]] = []
+        if not symbol_map:
+            return results
+
+        symbols = [yf_symbol for yf_symbol, _ in symbol_map.values()]
+        # 取近两日数据以计算涨跌幅，与原逐个 history(period='2d') 保持一致
+        df = yf.download(
+            tickers=symbols,
+            period='2d',
+            progress=False,
+            auto_adjust=True,
+            group_by='ticker',
+            threads=True,
+        )
+
+        for return_code, (yf_symbol, name) in symbol_map.items():
+            try:
+                hist = self._extract_symbol_frame(df, yf_symbol, allow_flat=len(symbols) == 1)
+                if hist is None:
+                    logger.warning(f"[Yfinance] 批量获取 {name}({yf_symbol}) 无数据，跳过")
+                    continue
+                today_row = hist.iloc[-1]
+                prev_row = hist.iloc[-2] if len(hist) > 1 else today_row
+                price = float(today_row['Close'])
+                prev_close = float(prev_row['Close'])
+                change = price - prev_close
+                change_pct = (change / prev_close) * 100 if prev_close else 0
+                high = float(today_row['High'])
+                low = float(today_row['Low'])
+                # 振幅 = (最高 - 最低) / 昨收 * 100
+                amplitude = ((high - low) / prev_close * 100) if prev_close else 0
+                results.append({
+                    'code': return_code,
+                    'name': name,
+                    'current': price,
+                    'change': change,
+                    'change_pct': change_pct,
+                    'open': float(today_row['Open']),
+                    'high': high,
+                    'low': low,
+                    'prev_close': prev_close,
+                    'volume': float(today_row['Volume']),
+                    'amount': 0.0,  # Yahoo Finance 不提供准确成交额
+                    'amplitude': amplitude,
+                })
+            except Exception as e:
+                logger.warning(f"[Yfinance] 批量解析 {name}({yf_symbol}) 行情失败: {e}")
+
+        return results
 
     def get_main_indices(self, region: str = "cn") -> Optional[List[Dict[str, Any]]]:
         """
@@ -378,16 +438,8 @@ class YfinanceFetcher(BaseFetcher):
             'sh000300': ('000300.SS', '沪深300'),
         }
 
-        results = []
         try:
-            for ak_code, (yf_code, name) in yf_mapping.items():
-                try:
-                    item = self._fetch_yf_ticker_data(yf, yf_code, name, ak_code)
-                    if item:
-                        results.append(item)
-                        logger.debug(f"[Yfinance] 获取指数 {name} 成功")
-                except Exception as e:
-                    logger.warning(f"[Yfinance] 获取指数 {name} 失败: {e}")
+            results = self._fetch_yf_batch_data(yf, yf_mapping)
 
             if results:
                 logger.info(f"[Yfinance] 成功获取 {len(results)} 个 A 股指数行情")
@@ -399,22 +451,18 @@ class YfinanceFetcher(BaseFetcher):
         return None
 
     def _get_us_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
-        """获取美股主要指数行情（SPX、IXIC、DJI、VIX），复用 _fetch_yf_ticker_data"""
+        """获取美股主要指数行情（SPX、IXIC、DJI、VIX），复用 _fetch_yf_batch_data"""
         # 大盘复盘所需核心美股指数
         us_indices = ['SPX', 'IXIC', 'DJI', 'VIX']
-        results = []
         try:
+            symbol_map: Dict[str, Tuple[str, str]] = {}
             for code in us_indices:
                 yf_symbol, name = get_us_index_yf_symbol(code)
                 if not yf_symbol:
                     continue
-                try:
-                    item = self._fetch_yf_ticker_data(yf, yf_symbol, name, code)
-                    if item:
-                        results.append(item)
-                        logger.debug(f"[Yfinance] 获取美股指数 {name} 成功")
-                except Exception as e:
-                    logger.warning(f"[Yfinance] 获取美股指数 {name} 失败: {e}")
+                symbol_map[code] = (yf_symbol, name)
+
+            results = self._fetch_yf_batch_data(yf, symbol_map)
 
             if results:
                 logger.info(f"[Yfinance] 成功获取 {len(results)} 个美股指数行情")
@@ -426,7 +474,7 @@ class YfinanceFetcher(BaseFetcher):
         return None
 
     def _get_hk_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
-        """获取港股主要指数行情（HSI、HSTECH、HSCEI），复用 _fetch_yf_ticker_data"""
+        """获取港股主要指数行情（HSI、HSTECH、HSCEI），复用 _fetch_yf_batch_data"""
         # Yahoo Finance 港股指数符号映射：
         # - HSI -> ^HSI
         # - HSTECH -> HSTECH.HK（不是 ^HSTECH）
@@ -437,16 +485,8 @@ class YfinanceFetcher(BaseFetcher):
             'HSTECH': ('HSTECH.HK', '恒生科技指数'),
             'HSCEI': ('^HSCE', '国企指数'),
         }
-        results = []
         try:
-            for code, (yf_symbol, name) in hk_indices.items():
-                try:
-                    item = self._fetch_yf_ticker_data(yf, yf_symbol, name, code)
-                    if item:
-                        results.append(item)
-                        logger.debug(f"[Yfinance] 获取港股指数 {name} 成功")
-                except Exception as e:
-                    logger.warning(f"[Yfinance] 获取港股指数 {name} 失败: {e}")
+            results = self._fetch_yf_batch_data(yf, hk_indices)
 
             if results:
                 logger.info(f"[Yfinance] 成功获取 {len(results)} 个港股指数行情")
@@ -458,21 +498,13 @@ class YfinanceFetcher(BaseFetcher):
         return None
 
     def _get_jp_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
-        """获取日本主要指数行情（日经225、TOPIX），复用 _fetch_yf_ticker_data。"""
+        """获取日本主要指数行情（日经225、TOPIX），复用 _fetch_yf_batch_data。"""
         jp_indices = {
             'N225': ('^N225', '日经225'),
             'TOPX': ('^TOPX', '东证指数'),
         }
-        results = []
         try:
-            for code, (yf_symbol, name) in jp_indices.items():
-                try:
-                    item = self._fetch_yf_ticker_data(yf, yf_symbol, name, code)
-                    if item:
-                        results.append(item)
-                        logger.debug(f"[Yfinance] 获取日本指数 {name} 成功")
-                except Exception as e:
-                    logger.warning(f"[Yfinance] 获取日本指数 {name} 失败: {e}")
+            results = self._fetch_yf_batch_data(yf, jp_indices)
             if results:
                 logger.info(f"[Yfinance] 成功获取 {len(results)} 个日本指数行情")
                 return results
@@ -481,21 +513,13 @@ class YfinanceFetcher(BaseFetcher):
         return None
 
     def _get_kr_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
-        """获取韩国主要指数行情（KOSPI、KOSDAQ），复用 _fetch_yf_ticker_data。"""
+        """获取韩国主要指数行情（KOSPI、KOSDAQ），复用 _fetch_yf_batch_data。"""
         kr_indices = {
             'KS11': ('^KS11', 'KOSPI'),
             'KQ11': ('^KQ11', 'KOSDAQ'),
         }
-        results = []
         try:
-            for code, (yf_symbol, name) in kr_indices.items():
-                try:
-                    item = self._fetch_yf_ticker_data(yf, yf_symbol, name, code)
-                    if item:
-                        results.append(item)
-                        logger.debug(f"[Yfinance] 获取韩国指数 {name} 成功")
-                except Exception as e:
-                    logger.warning(f"[Yfinance] 获取韩国指数 {name} 失败: {e}")
+            results = self._fetch_yf_batch_data(yf, kr_indices)
             if results:
                 logger.info(f"[Yfinance] 成功获取 {len(results)} 个韩国指数行情")
                 return results
@@ -504,21 +528,19 @@ class YfinanceFetcher(BaseFetcher):
         return None
 
     def _get_tw_main_indices(self, yf) -> Optional[List[Dict[str, Any]]]:
-        """获取台湾主要指数行情（加权指数 ^TWII、柜买指数 ^TWOII），复用 _fetch_yf_ticker_data。"""
+        """取得台灣主要指數行情（加權指數 ^TWII、費城半導體指數 ^SOX），複用 _fetch_yf_batch_data。
+
+        櫃買指數（TPEx）在 Yahoo Finance 無對應可用代碼（^TWOII / ^TWO / ^TPEX 均無資料），
+        改用費城半導體指數作為台股半導體權值的領先參考：台股權值高度集中於半導體，
+        費半對台股大盤的解釋力優於櫃買指數。
+        櫃買指數改由 data_provider/tw_index_fetcher.py 走 TPEx 官方 OpenAPI 取得。
+        """
         tw_indices = {
-            'TWII': ('^TWII', '台湾加权指数'),
-            'TWOII': ('^TWOII', '台湾柜买指数'),
+            'TWII': ('^TWII', '台灣加權指數'),
+            'SOX': ('^SOX', '費城半導體指數'),   # 取代 Yahoo 無資料的 ^TWOII
         }
-        results = []
         try:
-            for code, (yf_symbol, name) in tw_indices.items():
-                try:
-                    item = self._fetch_yf_ticker_data(yf, yf_symbol, name, code)
-                    if item:
-                        results.append(item)
-                        logger.debug(f"[Yfinance] 获取台湾指数 {name} 成功")
-                except Exception as e:
-                    logger.warning(f"[Yfinance] 获取台湾指数 {name} 失败: {e}")
+            results = self._fetch_yf_batch_data(yf, tw_indices)
             if results:
                 logger.info(f"[Yfinance] 成功获取 {len(results)} 个台湾指数行情")
                 return results

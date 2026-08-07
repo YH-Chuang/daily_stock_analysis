@@ -3931,6 +3931,64 @@ class GeminiAnalyzer:
 > 三大法人是台股的筹码过滤器（相当于 A 股主力资金/龙虎榜的角色，但口径不同、不可混用）：外资与投信同向净买支持价格、同向净卖压制价格。请据此判断台股筹码结构，不要在有本数据时写“筹码结构：数据缺失”。
 """
 
+        # 添加台股估值與融資融券（WP-11，估值 + 籌碼過濾器）— tw-only；比照上方三大法人
+        # 區塊的寫法，延遲匯入 + 快取在 self 上、任何錯誤 fail-open（絕不中斷報告生成）。
+        # 僅在代碼帶明確 .TW / .TWO 後綴時才嘗試擷取，避免對非台股代碼發出無謂請求。
+        if isinstance(code, str) and (code.upper().endswith(".TW") or code.upper().endswith(".TWO")):
+            tw_fund_fetcher = getattr(self, "_tw_fundamental_fetcher", None)
+            if tw_fund_fetcher is None:
+                try:
+                    from data_provider.tw_fundamental_fetcher import TwFundamentalFetcher
+
+                    tw_fund_fetcher = TwFundamentalFetcher()
+                    self._tw_fundamental_fetcher = tw_fund_fetcher
+                except Exception as exc:  # noqa: BLE001 - 佈線失敗屬程式/部署問題，記重錯但仍 fail-open
+                    logger.error("[tw-fund] fetcher init failed (wiring bug?) code=%s: %s", code, exc)
+                    tw_fund_fetcher = None
+
+            tw_valuation = None
+            tw_margin = None
+            if tw_fund_fetcher is not None:
+                try:
+                    tw_valuation = tw_fund_fetcher.get_valuation(code)
+                except Exception as exc:  # noqa: BLE001 - fail-open by contract
+                    logger.warning("[tw-fund] get_valuation failed code=%s: %s", code, exc)
+                try:
+                    tw_margin = tw_fund_fetcher.get_margin(code)
+                except Exception as exc:  # noqa: BLE001 - fail-open by contract
+                    logger.warning("[tw-fund] get_margin failed code=%s: %s", code, exc)
+
+            # 只在資料非 None 時輸出；資料缺失時完全略過小節，不臆測、不補寫「數據缺失」。
+            if isinstance(tw_valuation, dict):
+                val_date_text = tw_valuation.get("date") or unknown_text
+                prompt += f"""
+### 台股估值指標（本益比／殖利率／股價淨值比，資料日期：{val_date_text}）
+| 指標 | 數值 | 說明 |
+|------|------|------|
+| 本益比（P/E） | {tw_valuation.get('pe', 'N/A')} | 缺值代表虧損或無 EPS，並非資料缺失 |
+| 殖利率（%） | {tw_valuation.get('dividend_yield', 'N/A')} | |
+| 股價淨值比（P/B） | {tw_valuation.get('pb', 'N/A')} | |
+| 資料來源 | {tw_valuation.get('source', 'N/A')} | |
+"""
+
+            if isinstance(tw_margin, dict):
+                margin_date_text = tw_margin.get("date") or "來源未提供日期，僅為最新一期"
+                prompt += f"""
+### 台股融資融券餘額（籌碼過濾器，資料日期：{margin_date_text}）
+| 指標 | 數值 |
+|------|------|
+| 融資餘額 | {tw_margin.get('margin_balance', 'N/A')} |
+| 融資前日餘額 | {tw_margin.get('margin_balance_prev', 'N/A')} |
+| 融資餘額變化 | {tw_margin.get('margin_change', 'N/A')} |
+| 融資使用率（%） | {tw_margin.get('margin_utilization', 'N/A')} |
+| 融券餘額 | {tw_margin.get('short_balance', 'N/A')} |
+| 融券前日餘額 | {tw_margin.get('short_balance_prev', 'N/A')} |
+| 融券餘額變化 | {tw_margin.get('short_change', 'N/A')} |
+| 資料來源 | {tw_margin.get('source', 'N/A')} |
+
+> 解讀指引（僅供參考方向，請勿直接當作結論）：融資餘額增加通常反映散戶融資槓桿升高、追價意願增強；融券餘額增加通常反映空方壓力升高或避險需求增加；融資使用率過高時較容易發生軋空風險。請結合價格位置與其他籌碼數據自行判斷，不要在有本數據時寫「融資融券：數據缺失」。
+"""
+
         # 添加筹码分布数据
         if 'chip' in context:
             chip = context['chip']
@@ -4113,6 +4171,14 @@ class GeminiAnalyzer:
 ### ⚠️ 重要：输出正确的股票名称格式
 正确的股票名称格式为“股票名称（股票代码）”，例如“贵州茅台（600519）”。
 如果上方显示的股票名称为"股票{code}"或不正确，请在分析开头**明确输出该股票的正确中文全称**。
+"""
+        # 台股報告以繁體中文（台灣用語）輸出，與大盤復盤的台股路徑保持一致；
+        # cn/hk/us/jp/kr 維持既有簡體輸出，不受影響。
+        if detect_market(code) == "tw":
+            prompt += """
+### ⚠️ 重要：台股輸出語言
+本標的為台股，**全文必須使用繁體中文並採用台灣金融用語**（例如：籌碼、權值股、當沖、
+融資融券、伺服器、部位、本益比、股價淨值比），不得輸出簡體字。
 """
         if use_legacy_default_prompt:
             prompt += f"""

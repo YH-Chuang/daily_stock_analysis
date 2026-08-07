@@ -5,6 +5,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from src.core.market_profile import get_profile
 from src.core.market_strategy import get_market_strategy_blueprint
 from src.market_analyzer import MarketAnalyzer, MarketOverview
 
@@ -28,6 +29,35 @@ class TestMarketStrategyBlueprint(unittest.TestCase):
         self.assertIn("Risk-on", block)
         self.assertIn("Macro & Flows", block)
 
+    def test_tw_blueprint_is_registered_like_jp_kr(self):
+        blueprint = get_market_strategy_blueprint("tw")
+        block = blueprint.to_prompt_block()
+
+        self.assertEqual(blueprint.region, "tw")
+        self.assertEqual(blueprint.title, "台灣市場三段式復盤策略")
+        self.assertIn("台灣市場三段式復盤策略", block)
+        self.assertIn("籌碼結構", block)
+        # 台股藍圖全程繁體，與 jp/kr 的簡體藍圖刻意不同
+        self.assertIn("進攻", block)
+        self.assertNotIn("进攻", block)
+
+
+class TestMarketProfileRegistry(unittest.TestCase):
+    """Validate per-region market profile lookup."""
+
+    def test_tw_profile_uses_taiex_mood_index(self):
+        profile = get_profile("tw")
+
+        self.assertEqual(profile.region, "tw")
+        self.assertEqual(profile.mood_index_code, "TWII")
+        self.assertFalse(profile.has_market_stats)
+        self.assertFalse(profile.has_sector_rankings)
+
+    def test_jp_kr_tw_profiles_are_region_specific(self):
+        for region in ("jp", "kr", "tw"):
+            with self.subTest(region=region):
+                self.assertEqual(get_profile(region).region, region)
+
 
 class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
     """Validate strategy section is injected into prompt/report."""
@@ -48,17 +78,19 @@ class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
         self.assertIn("Strategy Plan", prompt)
         self.assertIn("US Market Regime Strategy", prompt)
 
-    def test_jp_kr_prompt_uses_region_aware_english_shell(self):
+    def test_jp_kr_tw_prompt_uses_region_aware_english_shell(self):
         cases = [
             ("jp", "Japan market"),
             ("kr", "Korea market"),
+            ("tw", "Taiwan market"),
         ]
 
         for region, market_scope_name in cases:
             with self.subTest(region=region), patch(
                 "src.market_analyzer.get_config",
                 return_value=SimpleNamespace(report_language="en"),
-            ):
+            ), patch.object(MarketAnalyzer, "_build_tw_supplement_block", return_value=""):
+                # tw 的補充區塊會打 TPEx 真實網路，這裡與其他既有 region 一樣 mock 掉（不影響斷言）。
                 analyzer = MarketAnalyzer(region=region)
                 prompt = analyzer._build_review_prompt(MarketOverview(date="2026-02-24"), [])
 
@@ -81,23 +113,26 @@ class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
         self.assertNotIn("Strategy Blueprint", prompt)
         self.assertIn("风险偏好", prompt)
 
-    def test_jp_kr_prompt_uses_region_aware_chinese_shell(self):
+    def test_jp_kr_tw_prompt_uses_region_aware_chinese_shell(self):
+        # 第 4 欄為報告標題所用的「大盘复盘」字樣：台股改用繁體，jp/kr 維持簡體。
         cases = [
-            ("jp", "日本市场", "日本市场三段式复盘策略"),
-            ("kr", "韩国市场", "韩国市场三段式复盘策略"),
+            ("jp", "日本市场", "日本市场三段式复盘策略", "大盘复盘"),
+            ("kr", "韩国市场", "韩国市场三段式复盘策略", "大盘复盘"),
+            ("tw", "台灣市場", "台灣市場三段式復盤策略", "大盤復盤"),
         ]
 
-        for region, market_scope_name, strategy_title in cases:
+        for region, market_scope_name, strategy_title, recap_label in cases:
             with self.subTest(region=region), patch(
                 "src.market_analyzer.get_config",
                 return_value=SimpleNamespace(report_language="zh"),
-            ):
+            ), patch.object(MarketAnalyzer, "_build_tw_supplement_block", return_value=""):
+                # tw 的補充區塊會打 TPEx 真實網路，這裡與其他既有 region 一樣 mock 掉（不影響斷言）。
                 analyzer = MarketAnalyzer(region=region)
                 prompt = analyzer._build_review_prompt(MarketOverview(date="2026-02-24"), [])
 
             self.assertIn(f"专业的{market_scope_name}分析师", prompt)
             self.assertIn(f"结构化的{market_scope_name}大盘复盘报告", prompt)
-            self.assertIn(f"## 2026-02-24 {market_scope_name}大盘复盘", prompt)
+            self.assertIn(f"## 2026-02-24 {market_scope_name}{recap_label}", prompt)
             self.assertIn("## 数据边界", prompt)
             self.assertIn("### 三、消息催化", prompt)
             self.assertIn(strategy_title, prompt)
@@ -118,10 +153,11 @@ class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
         self.assertNotIn("### 一、市场总结", prompt)
         self.assertNotIn("A股市场三段式复盘策略", prompt)
 
-    def test_jp_kr_strategy_blocks_are_localized_when_report_language_is_en(self):
+    def test_jp_kr_tw_strategy_blocks_are_localized_when_report_language_is_en(self):
         cases = [
             ("jp", "Japan Market Regime Strategy", "Macro & FX", "日本市场三段式复盘策略"),
             ("kr", "Korea Market Regime Strategy", "Technology Cycle", "韩国市场三段式复盘策略"),
+            ("tw", "Taiwan Market Regime Strategy", "Positioning Structure", "台灣市場三段式復盤策略"),
         ]
 
         for region, title, dimension, chinese_title in cases:
@@ -143,21 +179,23 @@ class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
                 self.assertIn(dimension, markdown_block)
                 self.assertNotIn("### 六、策略框架", markdown_block)
 
-    def test_jp_kr_review_prompt_roles_are_market_aware(self):
+    def test_jp_kr_tw_review_prompt_roles_are_market_aware(self):
         cases = [
             ("jp", "Japan market", "日本市场"),
             ("kr", "Korea market", "韩国市场"),
+            ("tw", "Taiwan market", "台灣市場"),
         ]
 
         for region, english_market, chinese_market in cases:
+            # tw 的補充區塊會打 TPEx 真實網路，這裡與其他既有 region 一樣 mock 掉（不影響斷言）。
             with self.subTest(region=region, language="en"):
                 with patch(
                     "src.market_analyzer.get_config",
                     return_value=SimpleNamespace(report_language="en"),
-                ):
+                ), patch.object(MarketAnalyzer, "_build_tw_supplement_block", return_value=""):
                     analyzer = MarketAnalyzer(region=region)
 
-                prompt = analyzer._build_review_prompt(MarketOverview(date="2026-02-24"), [])
+                    prompt = analyzer._build_review_prompt(MarketOverview(date="2026-02-24"), [])
 
                 self.assertIn(
                     f"You are a professional {english_market} analyst.",
@@ -169,10 +207,10 @@ class TestMarketAnalyzerStrategyPrompt(unittest.TestCase):
                 with patch(
                     "src.market_analyzer.get_config",
                     return_value=SimpleNamespace(report_language="zh"),
-                ):
+                ), patch.object(MarketAnalyzer, "_build_tw_supplement_block", return_value=""):
                     analyzer = MarketAnalyzer(region=region)
 
-                prompt = analyzer._build_review_prompt(MarketOverview(date="2026-02-24"), [])
+                    prompt = analyzer._build_review_prompt(MarketOverview(date="2026-02-24"), [])
 
                 self.assertIn(f"你是一位专业的{chinese_market}分析师", prompt)
                 self.assertNotIn("A/H/美股市场分析师", prompt)

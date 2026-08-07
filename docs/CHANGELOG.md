@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [新功能] 大盘复盘支持台股（tw）区域，覆盖加权指数与费半联动
+- [修复] 台股指数行情移除 Yahoo 无数据的 ^TWOII，改用 ^SOX 费城半导体指数
+- [新功能] 新增 `data_provider/tw_index_fetcher.py`，从 TPEx / TWSE 官方开放资料（免 API key，OGDL v1）取得柜买指数、上柜市场宽度、上柜类股成交比重与加权指数备援；沿用 `tw_institutional_fetcher` 的节流、熔断与 fail-open 契约
+- [改进] yfinance 指数行情由逐个 `yf.Ticker().history()` 改为单次 `yf.download()` 批量请求（台股两档实测 0.50s -> 0.12s），减少请求数并降低限流风险；输出字段与原实现保持一致
+- [改进] 台股（tw）报告全程输出繁体中文并采用台湾金融用语，覆盖大盘复盘标题、策略蓝图、大盘复盘生成提示与个股分析生成提示；cn/hk/us/jp/kr 维持既有简体输出不变。注意：报告结构标签（章节标题等）仍来自共用的 `zh` 语言包，尚未提供独立的 `zh-tw` 语言包
+- [新功能] 大盘复盘（tw）新增「上柜市场补充资料」区块，展示柜买指数、上柜涨跌家数与上柜类股成交比重 Top 5，并明确标注仅涵盖上柜（TPEx）、不代表台股整体市场宽度；`TW_PROFILE.has_market_stats` / `has_sector_rankings` 维持 `False`
+- [新功能] 新增 `data_provider/tw_fundamental_fetcher.py`，从 TWSE / TPEx 官方开放资料（免 API key）取得台股本益比／殖利率／股价净值比与融资融券余额，并接入个股分析 Prompt（`.TW`/`.TWO` 专属小节，繁体中文），上市融资融券端点无日期栏位时明确标注「来源未提供日期」而非假造日期
+- [新功能] 新增 `data_provider/tw_quote_fetcher.py`（`TwQuoteFetcher`），基于 TWSE/TPEx 官方逐月行情端点作为台股日线行情第二数据源，在 Yahoo Finance 等既有数据源均失败时兜底；默认优先级 6（`TW_QUOTE_PRIORITY` 可配置），已注册进 tw 的日线数据源回退链，不影响 cn/hk/us/jp/kr 既有回退链
 - [新功能] Agent Chat 按会话持久化 Skill 选择，支持刷新和会话切换恢复，并区分省略 `skills`、显式空列表与非空选择；无持久化状态的历史会话继续使用运行时默认且不会被静默转为显式选择，复用分析 `context` 中残留的 legacy `skills` / `strategies` 也不会覆盖顶层三态或会话状态，非空但全部无效的 Skill 请求不会被当成显式空列表并清空既有选择
 - [改进] 后端 CI 在不跳过离线测试的前提下按完整测试文件分成三个独立 runner 并行执行，由单一 `backend-gate` 汇总门禁结果；实测文件耗时和首分片静态检查成本共同参与负载平衡，新测试文件自动纳入，现有 pip 安装和测试参数保持不变，避免 xdist 进程内并发的全局状态竞态。
 - [测试] 后端 CI 默认覆盖所有非 Web 改动，仅对已证明安全的纯 Web 路径跳过，并将整个 Web public 目录及前端渠道模板、设置帮助视为跨层运行合同；补充纯 Web、共享 Web 资产及 Web/非 Web 混合改动的过滤语义回归，明确 `predicate-quantifier: every` 按单文件匹配全部规则、再以任一匹配文件触发门禁。Docker CI 继续按构建输入过滤。离线测试保留稳定的串行执行与慢用例摘要，并移除重复用例和测试内真实等待。

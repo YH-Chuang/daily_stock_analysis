@@ -140,14 +140,14 @@ class MarketAnalyzer:
         Args:
             search_service: 搜索服务实例
             analyzer: AI分析器实例（用于调用LLM）
-            region: 市场区域 cn=A股 hk=港股 us=美股 jp=日本 kr=韩国
+            region: 市场区域 cn=A股 hk=港股 us=美股 jp=日本 kr=韩国 tw=台湾
             config: 本次复盘使用的配置；未传时读取全局配置
         """
         self.config = config or get_config()
         self.search_service = search_service
         self.analyzer = analyzer
         self.data_manager = DataFetcherManager()
-        self.region = region if region in ("cn", "us", "hk", "jp", "kr") else "cn"
+        self.region = region if region in ("cn", "us", "hk", "jp", "kr", "tw") else "cn"
         self.profile: MarketProfile = get_profile(self.region)
         self.strategy = get_market_strategy_blueprint(self.region)
 
@@ -179,6 +179,8 @@ class MarketAnalyzer:
             return "Japan market" if review_language == "en" else "日本市场"
         if self.region == "kr":
             return "Korea market" if review_language == "en" else "韩国市场"
+        if self.region == "tw":
+            return "Taiwan market" if review_language == "en" else "台灣市場"
         if review_language == "en":
             return "A-share market"
         return "A股市场"
@@ -193,13 +195,15 @@ class MarketAnalyzer:
             return "JPY bn" if self._get_review_language() == "en" else "十亿日元"
         if self.region == "kr":
             return "KRW bn" if self._get_review_language() == "en" else "十亿韩元"
+        if self.region == "tw":
+            return "TWD bn" if self._get_review_language() == "en" else "十億新台幣"
         return "CNY 100m" if self._get_review_language() == "en" else "亿"
 
     def _format_turnover_value(self, amount_raw: float) -> str:
         """Format raw turnover according to market-specific units."""
         if amount_raw == 0.0:
             return "N/A"
-        if self.region in ("us", "hk", "jp", "kr"):
+        if self.region in ("us", "hk", "jp", "kr", "tw"):
             return f"{amount_raw / 1e9:.2f}"
         if amount_raw > 1e6:
             return f"{amount_raw / 1e8:.0f}"
@@ -220,6 +224,7 @@ class MarketAnalyzer:
                 "hk": "HK Market Recap",
                 "jp": "Japan Market Recap",
                 "kr": "Korea Market Recap",
+                "tw": "Taiwan Market Recap",
             }
             market_name = market_names.get(self.region, "A-share Market Recap")
             return f"## {date} {market_name}"
@@ -235,6 +240,8 @@ class MarketAnalyzer:
                 return "Analyze the key moves in the Nikkei 225, TOPIX, and other major Japanese indices."
             if self.region == "kr":
                 return "Analyze the key moves in the KOSPI, KOSDAQ, and other major Korean indices."
+            if self.region == "tw":
+                return "Analyze the key moves in the TAIEX and the Philadelphia Semiconductor Index."
             return "Analyze the price action in the SSE, SZSE, ChiNext, and other major indices."
         return self.profile.prompt_index_hint
 
@@ -320,6 +327,33 @@ Focus on KOSPI, KOSDAQ, semiconductor heavyweights, and global technology risk a
 - Risk-on: KOSPI and KOSDAQ rise together with confirmed technology leadership and improving external risk appetite.
 - Neutral: index or heavyweight divergence; keep sizing controlled and wait for confirmation.
 - Risk-off: technology heavyweights weaken or external risk rises; prioritize drawdown control."""
+        if self.region == "tw" and self._get_review_language() == "en":
+            return """## Strategy Blueprint: Taiwan Market Regime Strategy
+Focus on the TAIEX, semiconductor heavyweights, institutional net buying, and the Philadelphia Semiconductor Index read-through to define the next-session trading plan.
+
+### Strategy Principles
+- Read the TAIEX direction first, then check whether semiconductor heavyweights such as TSMC are moving in the same direction, and finally use the three major institutional investors' net buy/sell to confirm whether positioning supports the move.
+- Taiwan index weights are highly concentrated in semiconductors, so index conclusions must separate "heavyweight-driven" moves from "broad-based strength".
+- Base judgments only on available index data, institutional flows, news, and price action without inventing breadth or advance/decline statistics.
+
+### Analysis Dimensions
+- Trend Regime: Classify Taiwan equities as advancing, range-bound, or defensive.
+  - Has the TAIEX reclaimed or lost its key range
+  - Are semiconductor heavyweights supporting the index
+  - Is the index gain driven by only a few heavyweight names
+- Positioning Structure: Use the three major institutional investors to validate the sustainability of price signals.
+  - Are foreign investors and investment trusts net buying in the same direction
+  - Is the proprietary desk diverging from foreign investors
+  - Are margin financing and day-trading ratios overheated
+- Theme Signals: Identify durable leadership and crowded areas to avoid.
+  - Persistence of AI servers, advanced process nodes, and the PC chain
+  - Read-through between the Philadelphia Semiconductor Index and US technology stocks
+  - Whether news catalysts confirm price action
+
+### Action Framework
+- Risk-on: TAIEX advances with confirmed semiconductor heavyweight leadership and aligned net buying from foreign investors and investment trusts.
+- Neutral: index and heavyweight divergence, or inconsistent institutional direction; keep sizing controlled and wait for confirmation.
+- Risk-off: TAIEX weakens with sustained foreign selling; prioritize drawdown control."""
         if self.region == "us" and self._get_review_language() == "zh":
             return """## 美股市场三段式复盘策略
 聚焦指数趋势、宏观叙事与板块轮动，给出次日风控与仓位框架。
@@ -386,6 +420,12 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 - **Trend Regime**: Classify Korea equities as advancing, range-bound, or defensive based on KOSPI/KOSDAQ alignment.
 - **Technology Cycle**: Track semiconductor, AI hardware, and global technology read-through for market risk appetite.
 - **Theme Signals**: Focus on battery, auto, internet-platform, and KOSDAQ growth-stock rotation.
+"""
+        if self.region == "tw" and review_language == "en":
+            return """### 6. Strategy Framework
+- **Trend Regime**: Classify Taiwan equities as advancing, range-bound, or defensive based on the TAIEX and semiconductor heavyweight alignment.
+- **Positioning Structure**: Track net buy/sell from foreign investors, investment trusts, and the proprietary desk to validate price signals.
+- **Theme Signals**: Focus on AI servers, advanced process nodes, the PC chain, and the Philadelphia Semiconductor Index read-through.
 """
         if self.region == "us" and review_language == "zh":
             return """### 六、策略框架
@@ -615,6 +655,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             "hk": "港股市场" if review_language == "zh" else "HK market",
             "jp": "日本股市" if review_language == "zh" else "Japan stock market",
             "kr": "韩国股市" if review_language == "zh" else "Korea stock market",
+            "tw": "台股" if review_language == "zh" else "Taiwan stock market",
         }
         
         try:
@@ -1174,6 +1215,201 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             append_ranking("#### 概念板块领跌 Top 5", "概念板块", overview.bottom_concepts)
         return "\n".join(lines)
 
+    def _get_tw_index_fetcher(self):
+        """延遲初始化 TwIndexFetcher（比照 TwInstitutionalFetcher 的做法），避免拖慢啟動。"""
+        fetcher = getattr(self, "_tw_index_fetcher", None)
+        if fetcher is None:
+            try:
+                from data_provider.tw_index_fetcher import TwIndexFetcher
+
+                fetcher = TwIndexFetcher()
+                self._tw_index_fetcher = fetcher
+            except Exception as exc:  # noqa: BLE001 - 佈線失敗需大聲記錄，但仍 fail-open
+                logger.error(
+                    "[大盘] %s action=init_tw_index_fetcher status=failed error=%s",
+                    self._log_context(),
+                    exc,
+                )
+                fetcher = None
+        return fetcher
+
+    def _build_tw_supplement_block(self) -> str:
+        """台股「上櫃市場補充資料」區塊（僅 tw 有內容，其餘 region 一律回 ""）。
+
+        刻意不接入 ``TW_PROFILE.has_market_stats`` / ``has_sector_rankings``：
+        TPEx 免費開放資料的漲跌家數與成交比重僅涵蓋上櫃，若餵進
+        ``_build_market_light_scores`` / ``_build_sector_block`` 會被誤讀為台股
+        全市場的寬度／漲跌幅訊號，因此改以獨立區塊呈現，並附上不可省略的口徑
+        聲明（見 WP-9 spec「共通資料陷阱」與「設計決策」）。
+        """
+        if self.region != "tw":
+            return ""
+
+        try:
+            fetcher = self._get_tw_index_fetcher()
+            if fetcher is None:
+                return ""
+
+            highlight = fetcher.get_tpex_highlight()
+            sectors = fetcher.get_tpex_sector_weights()
+            if highlight is None and sectors is None:
+                return ""
+
+            if self._get_review_language() == "en":
+                return self._build_tw_supplement_block_en(highlight, sectors)
+            return self._build_tw_supplement_block_zh(highlight, sectors)
+        except Exception as exc:  # noqa: BLE001 - fail-open：補充區塊絕不可中斷主流程
+            logger.warning(
+                "[大盘] %s action=build_tw_supplement_block status=failed error=%s",
+                self._log_context(),
+                exc,
+            )
+            return ""
+
+    def _build_tw_supplement_block_zh(
+        self,
+        highlight: Optional[Dict[str, Any]],
+        sectors: Optional[List[Dict[str, Any]]],
+    ) -> str:
+        """繁體中文版「上櫃市場補充資料」區塊。"""
+        lines = [
+            "## 上櫃市場補充資料",
+            "",
+            "> 口徑聲明：以下數據**僅涵蓋上櫃（TPEx）**，不含上市（TWSE）。",
+            "> 不可解讀為台股整體市場寬度。上市當日漲跌家數目前無可靠的免費資料來源。",
+        ]
+
+        if highlight:
+            date_text = self._tw_fmt_date(highlight.get("date"))
+            close_index = highlight.get("close_index")
+            change = highlight.get("change")
+            change_pct = highlight.get("change_pct")
+            if close_index is None:
+                index_text = "—"
+            else:
+                index_text = f"{close_index:.2f}"
+                if change is not None and change_pct is not None:
+                    index_text += f"（{change:+.2f}，{change_pct:+.2f}%）"
+                elif change is not None:
+                    index_text += f"（{change:+.2f}）"
+            advancing_text = self._tw_fmt_count(highlight.get("advancing"), highlight.get("limit_up"), "漲停")
+            declining_text = self._tw_fmt_count(highlight.get("declining"), highlight.get("limit_down"), "跌停")
+            unchanged = highlight.get("unchanged")
+            unchanged_text = "—" if unchanged is None else str(unchanged)
+            lines.extend([
+                "",
+                f"### 櫃買指數與上櫃漲跌家數（資料日期：{date_text}）",
+                "| 項目 | 數值 |",
+                "|------|------|",
+                f"| 櫃買指數 | {index_text} |",
+                f"| 上漲家數 | {advancing_text} |",
+                f"| 下跌家數 | {declining_text} |",
+                f"| 平盤家數 | {unchanged_text} |",
+            ])
+
+        if sectors:
+            sector_date = self._tw_fmt_date(sectors[0].get("date"))
+            lines.extend([
+                "",
+                f"### 上櫃類股成交比重 Top 5（資料日期：{sector_date}）",
+                "> 此為**成交金額比重**（資金集中度），**不是漲跌幅排行**。",
+                "| 排名 | 類股 | 成交比重 |",
+                "|------|------|----------|",
+            ])
+            for rank, item in enumerate(sectors[:5], 1):
+                weight = item.get("weight")
+                weight_text = "—" if weight is None else f"{weight:.2f}%"
+                sector_name = item.get("sector") or "—"
+                lines.append(f"| {rank} | {sector_name} | {weight_text} |")
+
+        return "\n".join(lines)
+
+    def _build_tw_supplement_block_en(
+        self,
+        highlight: Optional[Dict[str, Any]],
+        sectors: Optional[List[Dict[str, Any]]],
+    ) -> str:
+        """English version of the Taiwan TPEx (over-the-counter) supplement block."""
+        lines = [
+            "## Taiwan TPEx (Over-the-Counter) Supplement",
+            "",
+            "> Scope disclaimer: the data below **covers TPEx (over-the-counter) only**, excluding TWSE (listed/main board).",
+            "> Do not read this as whole-market breadth for Taiwan equities. No reliable free data source currently "
+            "provides same-day TWSE advance/decline counts.",
+        ]
+
+        if highlight:
+            date_text = self._tw_fmt_date(highlight.get("date"))
+            close_index = highlight.get("close_index")
+            change = highlight.get("change")
+            change_pct = highlight.get("change_pct")
+            if close_index is None:
+                index_text = "—"
+            else:
+                index_text = f"{close_index:.2f}"
+                if change is not None and change_pct is not None:
+                    index_text += f" ({change:+.2f}, {change_pct:+.2f}%)"
+                elif change is not None:
+                    index_text += f" ({change:+.2f})"
+            advancing_text = self._tw_fmt_count_en(highlight.get("advancing"), highlight.get("limit_up"), "limit-up")
+            declining_text = self._tw_fmt_count_en(highlight.get("declining"), highlight.get("limit_down"), "limit-down")
+            unchanged = highlight.get("unchanged")
+            unchanged_text = "—" if unchanged is None else str(unchanged)
+            lines.extend([
+                "",
+                f"### TPEx Index & TPEx-only Advance/Decline (as of {date_text})",
+                "| Item | Value |",
+                "|------|-------|",
+                f"| TPEx Index | {index_text} |",
+                f"| Advancing | {advancing_text} |",
+                f"| Declining | {declining_text} |",
+                f"| Unchanged | {unchanged_text} |",
+            ])
+
+        if sectors:
+            sector_date = self._tw_fmt_date(sectors[0].get("date"))
+            lines.extend([
+                "",
+                f"### TPEx Sector Turnover Weight Top 5 (as of {sector_date})",
+                "> This is a **turnover-value weight** (capital concentration) figure, "
+                "**not an advance/decline (price-change) ranking**.",
+                "| Rank | Sector | Turnover Weight |",
+                "|------|--------|------------------|",
+            ])
+            for rank, item in enumerate(sectors[:5], 1):
+                weight = item.get("weight")
+                weight_text = "—" if weight is None else f"{weight:.2f}%"
+                sector_name = item.get("sector") or "—"
+                lines.append(f"| {rank} | {sector_name} | {weight_text} |")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _tw_fmt_date(date_str: Any) -> str:
+        """``20260806`` -> ``2026-08-06``；非 8 碼數字一律回 ``—``（缺值不假造）。"""
+        text = str(date_str) if date_str is not None else ""
+        if len(text) != 8 or not text.isdigit():
+            return "—"
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+
+    @staticmethod
+    def _tw_fmt_count(count: Optional[int], limit_count: Optional[int], limit_label: str) -> str:
+        if count is None:
+            return "—"
+        text = str(count)
+        if limit_count is not None:
+            text += f"（其中{limit_label} {limit_count}）"
+        return text
+
+    @staticmethod
+    def _tw_fmt_count_en(count: Optional[int], limit_count: Optional[int], limit_label: str) -> str:
+        if count is None:
+            return "—"
+        text = str(count)
+        if limit_count is not None:
+            text += f" ({limit_label} {limit_count})"
+        return text
+
     def _build_news_block(self, news: List) -> str:
         """Build a compact source-aware news catalyst list for the rendered report."""
         if not news:
@@ -1450,6 +1686,8 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         stats_block = ""
         sector_block = ""
         data_limits_block = ""
+        # 台股上櫃補充資料（純加法、tw-only）：非 tw 一律回 ""，不影響其他 region。
+        tw_supplement_block = self._build_tw_supplement_block()
         if review_language == "en":
             if self.profile.has_market_stats:
                 stats_block = f"""## Market Breadth
@@ -1535,12 +1773,36 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
         output_template_sections = self._build_output_template_sections(review_language)
         zh_market_scope_name = self._get_market_scope_name("zh")
         zh_report_title = f"{overview.date} 大盘复盘"
-        if self.region in ("jp", "kr"):
+        if self.region == "tw":
+            # 台股報告全程使用繁體中文，與台灣使用者的閱讀習慣一致。
+            zh_report_title = f"{overview.date} {zh_market_scope_name}大盤復盤"
+        elif self.region in ("jp", "kr"):
             zh_report_title = f"{overview.date} {zh_market_scope_name}大盘复盘"
         workflow_hint = (
             "报告要像交易员盘后工作台：先给结论，再按数据表、主线、催化、计划展开"
             if self.profile.has_market_stats or self.profile.has_sector_rankings
             else "报告要像交易员盘后工作台：先给结论，再按指数、新闻催化和计划展开"
+        )
+        # 台股報告以繁體中文（台灣用語）輸出，與台灣使用者的閱讀習慣一致；
+        # cn/hk/jp/kr 維持既有簡體輸出，不受影響。
+        zh_script_requirement = (
+            "\n- 全文必須使用繁體中文並採用台灣金融用語（例如：籌碼、權值股、當沖、"
+            "融資融券、伺服器），不得輸出簡體字"
+            if self.region == "tw"
+            else ""
+        )
+        # 僅 tw：引用上櫃補充資料時必須標明「上櫃」口徑，不得推論為台股全市場。
+        tw_scope_requirement_zh = (
+            "\n- 引用「上櫃市場補充資料」數據時，必須明確標示「上櫃」口徑，"
+            "不得推論或改寫為台股全市場的漲跌家數或市場寬度"
+            if self.region == "tw"
+            else ""
+        )
+        tw_scope_requirement_en = (
+            "\n- When citing the Taiwan TPEx (Over-the-Counter) Supplement data, always label it explicitly as "
+            "TPEx-only and never infer or restate it as whole-market Taiwan breadth."
+            if self.region == "tw"
+            else ""
         )
 
         if review_language == "en":
@@ -1552,7 +1814,7 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
 - No JSON
 - No code blocks
 - Use emoji sparingly in headings (at most one per heading)
-- The entire fixed shell, headings, guidance, and conclusion must be in {shell_language_label}
+- The entire fixed shell, headings, guidance, and conclusion must be in {shell_language_label}{tw_scope_requirement_en}
 {data_boundary_requirement}
 
 ---
@@ -1570,6 +1832,8 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
 {sector_block}
 
 {data_limits_block}
+
+{tw_supplement_block}
 
 ## Market News
 {news_placeholder}
@@ -1606,7 +1870,7 @@ Output the report content directly, no extra commentary.
 - 禁止输出代码块
 - emoji 仅在标题处少量使用（每个标题最多1个）
 - {workflow_hint}
-- 不要重复列出已由系统注入的表格数据；正文负责解释表格背后的含义
+- 不要重复列出已由系统注入的表格数据；正文负责解释表格背后的含义{zh_script_requirement}{tw_scope_requirement_zh}
 {data_boundary_requirement}
 
 ---
@@ -1624,6 +1888,8 @@ Output the report content directly, no extra commentary.
 {sector_block}
 
 {data_limits_block}
+
+{tw_supplement_block}
 
 ## 市场新闻
 {news_placeholder}
@@ -1716,6 +1982,7 @@ Output the report content directly, no extra commentary.
                 "hk": "HK Market Recap",
                 "jp": "Japan Market Recap",
                 "kr": "Korea Market Recap",
+                "tw": "Taiwan Market Recap",
             }
             market_name = market_names.get(self.region, "A-share Market Recap")
             report = f"""## {overview.date} {market_name}
@@ -1737,7 +2004,7 @@ Market conditions can change quickly. The data above is for reference only and d
 """
             return report
 
-        market_labels = {"cn": "A股", "us": "美股", "hk": "港股", "jp": "日股", "kr": "韩股"}
+        market_labels = {"cn": "A股", "us": "美股", "hk": "港股", "jp": "日股", "kr": "韩股", "tw": "台股"}
         market_label = market_labels.get(self.region, "A股")
         dashboard_block = (
             self._build_stats_block(overview)

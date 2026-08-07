@@ -889,8 +889,10 @@ class ComputeEffectiveRegionTestCase(unittest.TestCase):
             )
 
     def test_both_all_open_returns_comma_joined_supported_markets(self):
-        result = trading_calendar.compute_effective_region("both", {"cn", "hk", "us", "jp", "kr"})
-        self.assertEqual(result, "cn,hk,us,jp,kr")
+        result = trading_calendar.compute_effective_region(
+            "both", {"cn", "hk", "us", "jp", "kr", "tw"}
+        )
+        self.assertEqual(result, "cn,hk,us,jp,kr,tw")
 
     def test_both_jp_kr_open_returns_comma_joined_two(self):
         result = trading_calendar.compute_effective_region("both", {"jp", "kr"})
@@ -940,9 +942,27 @@ class ComputeEffectiveRegionTestCase(unittest.TestCase):
         self.assertEqual(trading_calendar.compute_effective_region("hk", {"cn", "hk", "us"}), "hk")
         self.assertEqual(trading_calendar.compute_effective_region("jp", {"jp"}), "jp")
         self.assertEqual(trading_calendar.compute_effective_region("kr", {"kr"}), "kr")
+        self.assertEqual(trading_calendar.compute_effective_region("tw", {"tw"}), "tw")
 
     def test_single_region_closed(self):
         self.assertEqual(trading_calendar.compute_effective_region("hk", {"cn", "us"}), "")
+        self.assertEqual(trading_calendar.compute_effective_region("tw", {"cn", "us"}), "")
+
+    def test_tw_participates_in_both_and_comma_subsets(self):
+        # 台股（tw）与 jp/kr 对等：both 展开、逗号子集、非法 token 过滤行为一致。
+        self.assertEqual(trading_calendar.compute_effective_region("both", {"tw"}), "tw")
+        self.assertEqual(
+            trading_calendar.compute_effective_region("both", {"jp", "tw"}), "jp,tw"
+        )
+        self.assertEqual(
+            trading_calendar.compute_effective_region("cn,tw", {"cn", "tw", "kr"}), "cn,tw"
+        )
+        self.assertEqual(
+            trading_calendar.compute_effective_region("cn,tw", {"tw", "kr"}), "tw"
+        )
+        self.assertEqual(
+            trading_calendar.compute_effective_region("tw,xx", {"cn", "tw"}), "tw"
+        )
 
     def test_invalid_region_defaults_to_cn(self):
         result = trading_calendar.compute_effective_region("invalid", {"cn"})

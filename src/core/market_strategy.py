@@ -228,6 +228,38 @@ KR_BLUEPRINT = MarketStrategyBlueprint(
         "防守：科技权重转弱或外部风险升温，优先控制回撤。",
     ],
 )
+TW_BLUEPRINT = MarketStrategyBlueprint(
+    region="tw",
+    title="台灣市場三段式復盤策略",
+    positioning="聚焦加權指數、半導體權值、三大法人買賣超與費半連動，形成次日交易計劃。",
+    principles=[
+        "先看加權指數方向，再看台積電等半導體權值股是否同向，最後用三大法人買賣超驗證籌碼是否支持。",
+        "台股權值高度集中於半導體，指數結論必須區分「權值帶動」與「全面轉強」。",
+        "只基於可得指數、法人數據、新聞和價格行為判斷，不臆造市場寬度或漲跌家數。",
+    ],
+    dimensions=[
+        StrategyDimension(
+            name="趨勢結構",
+            objective="判斷台股處於上攻、盤整還是防守階段。",
+            checkpoints=["加權指數是否突破或跌破關鍵區間", "半導體權值股是否支撐指數", "指數漲幅是否由少數權值股貢獻"],
+        ),
+        StrategyDimension(
+            name="籌碼結構",
+            objective="用三大法人動向驗證價格訊號的可持續性。",
+            checkpoints=["外資與投信是否同向淨買超", "自營商方向是否與外資背離", "融資融券與當沖比重是否過熱"],
+        ),
+        StrategyDimension(
+            name="題材線索",
+            objective="提煉可延續主流與需要迴避的擁擠方向。",
+            checkpoints=["AI 伺服器／先進製程／PC 鏈的持續性", "費半與美股科技股的連動方向", "新聞催化是否支撐價格行為"],
+        ),
+    ],
+    action_framework=[
+        "進攻：加權指數上行 + 半導體權值確認 + 外資與投信同向買超。",
+        "均衡：指數與權值股分化，或法人方向不一致，控制部位並等待確認。",
+        "防守：加權指數轉弱 + 外資持續賣超，優先控制回檔。",
+    ],
+)
 
 def get_market_strategy_blueprint(region: str) -> MarketStrategyBlueprint:
     """Return strategy blueprint by market region."""
@@ -239,4 +271,6 @@ def get_market_strategy_blueprint(region: str) -> MarketStrategyBlueprint:
         return JP_BLUEPRINT
     if region == "kr":
         return KR_BLUEPRINT
+    if region == "tw":
+        return TW_BLUEPRINT
     return CN_BLUEPRINT

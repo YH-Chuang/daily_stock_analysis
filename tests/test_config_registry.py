@@ -805,8 +805,13 @@ class TestMarketReviewFieldsRegistered(unittest.TestCase):
         self.assertEqual(field["default_value"], "cn")
         self.assertEqual(
             field["validation"]["allowed_values"],
-            ["cn", "hk", "us", "jp", "kr", "both"],
+            ["cn", "hk", "us", "jp", "kr", "tw", "both"],
         )
+        self.assertEqual(
+            field["options"],
+            ["cn", "hk", "us", "jp", "kr", "tw", "both"],
+        )
+        self.assertIn("MARKET_REVIEW_REGION=tw", field["examples"])
         self.assertEqual(
             field["validation"]["delimiter"],
             ",",

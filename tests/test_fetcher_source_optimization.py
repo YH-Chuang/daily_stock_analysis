@@ -141,6 +141,9 @@ class TestFetcherSourceOptimization(unittest.TestCase):
             mock_longbridge.has_configured_credentials.return_value = False
             manager = DataFetcherManager()
 
+        # TwQuoteFetcher 不需要任何凭证，与 Efinance/Akshare 等一样无条件注册，
+        # 因此出现在默认清单尾部（P6）。本用例断言的是"缺少凭证的可选数据源被跳过"，
+        # 即 Tushare / Longbridge 不被实例化 —— 这一点仍然成立。
         self.assertEqual(
             manager.available_fetchers,
             [
@@ -150,6 +153,7 @@ class TestFetcherSourceOptimization(unittest.TestCase):
                 "BaostockFetcher",
                 "YfinanceFetcher",
                 "TencentFetcher",
+                "TwQuoteFetcher",
             ],
         )
         mock_tushare.assert_not_called()

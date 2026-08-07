@@ -45,7 +45,7 @@
 
 ## 日本/韩国大盘复盘 v1（Issue #1815 Phase 2）
 
-大盘复盘 `MARKET_REVIEW_REGION` 新增 `jp` 与 `kr`，并纳入 `both` 的多市场顺序：`cn,hk,us,jp,kr`。
+大盘复盘 `MARKET_REVIEW_REGION` 新增 `jp` 与 `kr`，并纳入 `both` 的多市场顺序：`cn,hk,us,jp,kr`（`tw` 接入后 `both` 顺序为 `cn,hk,us,jp,kr,tw`，见下文「台湾大盘复盘 v1」）。
 
 支持范围：
 
@@ -93,7 +93,7 @@ PY
 
 当前阶段支持手动输入台湾股票的 Yahoo Finance 后缀代码，进入既有个股分析、历史保存、报告渲染、DecisionSignal、Portfolio 和 Intelligence 链路。TWSE 上市股票使用 `.TW` 后缀，TPEx 上柜（柜买）股票使用 `.TWO` 后缀，二者折叠为同一 `tw` 市场标签。
 
-近期台股链路已从早期 MVP 收敛为一等个股分析市场：市场识别、数据路由、交易日历/市场阶段、YFinance 日线与基础行情、主要指数、服务层/API/Web 市场枚举、TWD 币种标注、三大法人报告区块与 LLM prompt 消费均已接入。仍需保留的边界是：台股股票池种子/自动补全、大盘复盘 `MARKET_REVIEW_REGION=tw`、Market Light 大盘红绿灯告警和完整台股市场宽度/板块排行尚未纳入。
+近期台股链路已从早期 MVP 收敛为一等个股分析市场：市场识别、数据路由、交易日历/市场阶段、YFinance 日线与基础行情、主要指数、服务层/API/Web 市场枚举、TWD 币种标注、三大法人报告区块、估值与融资融券区块与 LLM prompt 消费均已接入。大盘复盘 `MARKET_REVIEW_REGION=tw` 也已接入，并附带上柜市场补充资料区块（见下文「台湾大盘复盘 v1」）。仍需保留的边界是：台股股票池种子/自动补全、Market Light 大盘红绿灯告警和完整台股（上市 + 上柜）市场宽度/板块排行尚未纳入——大盘复盘的市场宽度目前仅覆盖上柜（TPEx）。
 
 支持格式：
 
@@ -108,19 +108,41 @@ PY
 - 基本面复用既有 offshore yfinance 轻量路径；`institution` 区块额外消费台股三大法人资料并渲染到报告，A 股专属资金流、龙虎榜、板块等能力按 `not_supported` 降级。
 - 报告 Prompt 已增加台股市场语义（新台币、三大法人、TWSE/TPEx ±10% 涨跌停），并将三大法人净买卖超注入 LLM 分析上下文，避免套用 A 股北向资金、龙虎榜等概念。
 - 交易日历注册 `tw: XTAI / Asia/Taipei`。TWSE 为 09:00–13:30 连续交易、无午休；收盘集合竞价 13:25–13:30 已按 5 分钟启发式窗口建模（`_CLOSING_AUCTION_WINDOW_MINUTES["tw"]=5`，`market_phase` 可返回 `closing_auction`）。JP/KR 也已按常规交易时段补齐收盘集合竞价窗口（JP 15:25-15:30、KR 15:20-15:30）。若本地 `exchange-calendars` 版本缺少对应日历，既有 fail-open/fail-closed 语义保持不变。
-- 主要指数提供加权指数 `^TWII` 与柜买指数 `^TWOII`。
+- 主要指数提供加权指数 `^TWII` 与费城半导体指数 `^SOX`。柜买指数（TPEx）在 Yahoo Finance 无可用代码（`^TWOII` / `^TWO` / `^TPEX` 均无数据），故改用费半：台股权值高度集中于半导体，费半对台股大盘的解释力优于柜买指数。
 - 三大法人买卖超（institutional flows）资料层：`TwInstitutionalFetcher`（`data_provider/tw_institutional_fetcher.py`）提供上市（TWSE T86，legacy `rwd` 端点）/ 上柜（TPEx OpenAPI）每日外资·投信·自营商·三大法人买卖超（单位：**股数**；按日期+市场做单日全市场缓存再过滤个股，TPEx 民国年转西元有单测覆盖）。接口失败/限流/空响应/字段缺失一律 **fail-open** 返回无数据，不中断分析；仅对 `.TW`/`.TWO` 生效，不改动现有市场流程。资料来源为政府开放资料，采「政府资料开放授权条款第 1 版」(OGDL v1，允许商用与再散布，需标示来源)。
 - 三大法人 fetcher 已具备并发缓存防击穿和按 TWSE/TPEx 分流的熔断保护；TPEx OpenAPI 仅服务最新交易日，传入与服务日期不符的明确日期会 fail-open 返回无数据，避免错日资料静默进入报告。
 - 台股财务金额会使用 TWD -> 「新台币」标注，避免落入 A 股语境下的默认「元」。
+- 估值与融资融券（籌碼過濾器）资料层：`TwFundamentalFetcher`（`data_provider/tw_fundamental_fetcher.py`）提供上市（TWSE `BWIBBU_ALL`）/ 上柜（TPEx `tpex_mainboard_peratio_analysis`）本益比、殖利率、股价净值比，以及上市（TWSE `MI_MARGN`）/ 上柜（TPEx `tpex_mainboard_margin_balance`）融资融券余额，同一"全市场单日表缓存 + 依代码过滤"典范、同一节流/熔断/fail-open 契约。已接入个股分析 Prompt（`.TW`/`.TWO` 专属繁体中文小节），仅在数据非 `None` 时输出，缺失时不臆测。上市 `MI_MARGN` 端点没有日期栏位，`date` 一律回传 `None` 并在 Prompt 中明写「来源未提供日期，僅為最新一期」，不假造日期。
+- 台股日线行情第二数据源：`TwQuoteFetcher`（`data_provider/tw_quote_fetcher.py`）基于 TWSE `STOCK_DAY` / TPEx `tradingStock` 官方逐月端点，作为 `YfinanceFetcher` 失效后的 tw 专属兜底，无需 API Key，默认优先级 6（`TW_QUOTE_PRIORITY` 可覆盖），已注册进 `DataFetcherManager` 的 tw 日线回退链；TPEx 端点单位为千股/千元，已在归一化时 × 1000 对齐 TWSE 的原始股数/元单位。不影响 cn/hk/us/jp/kr 既有回退链。
 
 不承诺项：
 
-- 不承诺实时行情；Yahoo Finance 数据可能延迟或字段缺失。
-- 不承诺完整基本面、行业/板块、市场宽度、涨跌家数或台股大盘复盘；`MARKET_REVIEW_REGION` 仍只接受 `cn/hk/us/jp/kr/both` 或这些市场的逗号子集。
+- 不承诺实时行情；Yahoo Finance 数据可能延迟或字段缺失；`TwQuoteFetcher` 同为 T-1（TWSE）/ T（TPEx）日频兜底，非实时行情。
+- 不承诺完整基本面、行业/板块、市场宽度或涨跌家数；台股大盘复盘仅提供主要指数、上柜市场补充资料（上柜漲跌家数与类股成交比重）、新闻线索与模板/LLM 复盘；**上市当日涨跌家数无可靠免费资料来源**，大盘复盘不提供覆盖上市 + 上柜的完整台股市场宽度或板块排行，`TW_PROFILE.has_market_stats` / `has_sector_rankings` 维持 `False`。`MARKET_REVIEW_REGION` 接受 `cn/hk/us/jp/kr/tw/both` 或这些市场的逗号子集。
+- 估值指标中本益比（P/E）为空值代表亏损或无 EPS，非资料缺失；TWSE 融资融券没有官方「融资使用率」栏位，不用限额自行推算未经验证的公式，一律留 `None`。
 - 台股股票索引/种子和 Web 自动补全仍未完整接入；告警 MarketRegion 与后端 Market Light 告警仍为 `cn/hk/us`，未含 `tw`。
 - 不补齐 Portfolio 的 TWD 汇率、成本、市值完整口径；台股 Portfolio 当前属于 partial valuation 市场。
 
-回滚方式：移除 `tw` 市场识别、交易日历注册、YFinance 路由扩展、三大法人资料层/报告消费、TWD 标注、服务层/API 市场枚举及前端市场类型放行，并删除本文档中的能力声明。
+回滚方式：移除 `tw` 市场识别、交易日历注册、YFinance 路由扩展、三大法人/估值/融资融券资料层与报告消费、`TwQuoteFetcher` 及其在 `DataFetcherManager` 中的注册、TWD 标注、服务层/API 市场枚举及前端市场类型放行，并删除本文档中的能力声明。
+
+## 台湾大盘复盘 v1
+
+大盘复盘 `MARKET_REVIEW_REGION` 新增 `tw`，并纳入 `both` 的多市场顺序：`cn,hk,us,jp,kr,tw`。
+
+支持范围：
+
+- `tw`：通过 Yahoo Finance 获取加权指数 `^TWII` 与费城半导体指数 `^SOX`，输出台股大盘复盘。可复核页面：
+  - `^TWII`：<https://finance.yahoo.com/quote/%5ETWII/>
+  - `^SOX`：<https://finance.yahoo.com/quote/%5ESOX/>
+- 柜买指数（TPEx）在 Yahoo Finance 无可用代码，改用费半作为台股半导体权重的领先参考；台股权值高度集中于半导体，费半对台股大盘的解释力优于柜买指数。
+- 交易日检查复用既有 `tw: XTAI / Asia/Taipei` 交易日历，过滤 `both` 中当日开市市场。
+- 复盘策略、新闻搜索词、Prompt 市场语义和中英文通知标题均按 TW 独立 profile 处理。
+- 与 JP/KR 一致：`tw` 只扩展大盘复盘输入集合，不放开 Market Light 告警市场枚举。
+- **上柜市场补充资料区块**：`MarketAnalyzer._build_tw_supplement_block()` 延迟接入 `TwIndexFetcher`，输出柜买指数、上柜涨跌家数（含涨停/跌停计数）与上柜类股成交比重 Top 5（繁体中文，`review_language=en` 时有对应英文版），插入位置为中/英文 prompt 的 `{data_limits_block}` 之后、`## 市场新闻` 之前；区块固定带有「仅涵盖上柜（TPEx）」「不是涨跌幅排行」的口径声明，缺值一律显示 `—` 不假造为 `0`。仅 `region="tw"` 有内容，其余 region 一律回空字符串；TPEx 两个数据源皆不可用时整个区块回空字符串，不抛例外。**不改动** `TW_PROFILE.has_market_stats` / `has_sector_rankings`（维持 `False`），避免上柜口径的家数/成交比重被 `_build_market_light_scores` / `_build_sector_block` 误读为覆盖上市 + 上柜的全市场宽度或涨跌幅排行。
+
+不承诺项：台股大盘复盘不提供覆盖上市的完整市场宽度、涨跌家数或板块排行；上柜市场补充资料区块仅涵盖 TPEx，不含 TWSE（上市当日涨跌家数无可靠免费资料来源）。
+
+回滚方式：从 `MARKET_REVIEW_REGION` 合法值、MarketProfile/MarketStrategy、`_MARKET_REVIEW_MARKETS`、`MarketAnalyzer._build_tw_supplement_block()` 及其 prompt 拼接点和本节中移除 `tw`。
 
 ## 日本/韩国 Portfolio 与 Market Light 边界（Issue #1815 Phase 3）
 
