@@ -110,8 +110,9 @@ const clearPersistedScreenTask = () => {
   }
 };
 
+// title 已随界面语言本地化，只能按 category 判定，否则 en / zh-tw 下会漏判并无限轮询。
 const isUnrecoverableScreenTaskError = (error: ParsedApiError) =>
-  error.title === '选股任务不可恢复';
+  error.category === 'screening_task_not_found';
 
 const formatRecoverableScreenTaskPollingError = (error: ParsedApiError) => {
   if (error.category === 'upstream_timeout') {

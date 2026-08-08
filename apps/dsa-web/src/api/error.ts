@@ -1,4 +1,13 @@
 import axios from 'axios';
+import { formatUiText, UI_TEXT, type UiTextKey, type UiTextParams } from '../i18n/uiText';
+import { getRuntimeInitialLanguage } from '../utils/uiLanguage';
+
+// 本模块由 axios 拦截器和 store 调用，不在 React 组件树内，拿不到 useUiLanguage()。
+// 这里复用 UiLanguageProvider 初始化时相同的解析顺序（localStorage -> navigator -> zh），
+// 保证错误文案语言与界面语言一致。
+function t(key: UiTextKey, params?: UiTextParams): string {
+  return formatUiText(UI_TEXT[getRuntimeInitialLanguage()][key], params);
+}
 
 export type ApiErrorCategory =
   | 'agent_disabled'
@@ -8,6 +17,7 @@ export type ApiErrorCategory =
   | 'invalid_tool_call'
   | 'portfolio_oversell'
   | 'portfolio_busy'
+  | 'screening_task_not_found'
   | 'upstream_llm_400'
   | 'upstream_timeout'
   | 'upstream_network'
@@ -237,7 +247,7 @@ export function formatParsedApiError(parsed: ParsedApiError): string {
   if (parsed.title === parsed.message) {
     return parsed.title;
   }
-  return `${parsed.title}：${parsed.message}`;
+  return t('common.apiError.formatted', { title: parsed.title, message: parsed.message });
 }
 
 export function getParsedApiError(error: unknown): ParsedApiError {
@@ -297,14 +307,15 @@ export function parseApiError(error: unknown): ParsedApiError {
   const errorMessage = getErrorMessage(error);
   const causeMessage = getCauseMessage(error);
   const code = getErrorCode(error);
-  const rawMessage = pickString(payloadText, response?.statusText, errorMessage, causeMessage, code)
-    ?? '请求未成功完成，请稍后重试。';
-  const matchText = buildMatchText([rawMessage, errorMessage, causeMessage, code, errorCode, response?.statusText]);
+  const upstreamText = pickString(payloadText, response?.statusText, errorMessage, causeMessage, code);
+  const rawMessage = upstreamText ?? t('common.apiError.retryLater');
+  // 分类只看后端/网络返回的原文，不掺入本地化兜底文案，避免界面语言影响命中结果。
+  const matchText = buildMatchText([upstreamText, errorMessage, causeMessage, code, errorCode, response?.statusText]);
 
   if (includesAny(matchText, ['agent mode is not enabled', 'agent_mode'])) {
     return createParsedApiError({
-      title: 'Agent 模式未开启',
-      message: '当前功能依赖 Agent 模式，请先开启后再重试。',
+      title: t('common.apiError.agentDisabledTitle'),
+      message: t('common.apiError.agentDisabledMessage'),
       rawMessage,
       status,
       category: 'agent_disabled',
@@ -315,8 +326,8 @@ export function parseApiError(error: unknown): ParsedApiError {
   const hasMissingParamText = includesAny(matchText, ['必须提供 stock_code 或 stock_codes', 'missing', 'required']);
   if (hasStockCodeField && hasMissingParamText) {
     return createParsedApiError({
-      title: '请求缺少必要参数',
-      message: '请先补充股票代码或必要输入后再试。',
+      title: t('common.apiError.missingParamsTitle'),
+      message: t('common.apiError.missingParamsMessage'),
       rawMessage,
       status,
       category: 'missing_params',
@@ -325,8 +336,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'portfolio_oversell' || includesAny(matchText, ['oversell detected'])) {
     return createParsedApiError({
-      title: '卖出数量超过可用持仓',
-      message: '卖出数量超过当前可用持仓，请删除或修正对应卖出流水后重试。',
+      title: t('common.apiError.portfolioOversellTitle'),
+      message: t('common.apiError.portfolioOversellMessage'),
       rawMessage,
       status,
       category: 'portfolio_oversell',
@@ -335,8 +346,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'portfolio_busy' || includesAny(matchText, ['portfolio ledger is busy'])) {
     return createParsedApiError({
-      title: '持仓账本正忙',
-      message: '持仓账本正在处理另一笔变更，请稍后重试。',
+      title: t('common.apiError.portfolioBusyTitle'),
+      message: t('common.apiError.portfolioBusyMessage'),
       rawMessage,
       status,
       category: 'portfolio_busy',
@@ -345,8 +356,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'screening_unavailable' || includesAny(matchText, ['内建选股引擎初始化失败', '选股功能初始化失败'])) {
     return createParsedApiError({
-      title: '选股功能未就绪',
-      message: '选股功能暂不可用，请检查策略配置、数据依赖和服务日志。',
+      title: t('common.apiError.screeningUnavailableTitle'),
+      message: t('common.apiError.screeningUnavailableMessage'),
       rawMessage,
       status,
       category: 'http_error',
@@ -355,18 +366,19 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'screening_screen_task_not_found') {
     return createParsedApiError({
-      title: '选股任务不可恢复',
-      message: '服务端没有找到这次选股任务，可能后端已重启或任务记录已清理，请重新运行选股。',
+      title: t('common.apiError.screeningTaskNotFoundTitle'),
+      message: t('common.apiError.screeningTaskNotFoundMessage'),
       rawMessage,
       status,
-      category: 'http_error',
+      // 独立 category：消费方需要一个不随界面语言变化的判定依据，不能再比对 title。
+      category: 'screening_task_not_found',
     });
   }
 
   if (errorCode === 'screening_screen_failed') {
     return createParsedApiError({
-      title: '选股失败',
-      message: '选股访问行情、快照或模型服务失败，请稍后重试，或检查网络与代理设置。',
+      title: t('common.apiError.screeningFailedTitle'),
+      message: t('common.apiError.screeningFailedMessage'),
       rawMessage,
       status,
       category: 'upstream_network',
@@ -383,8 +395,8 @@ export function parseApiError(error: unknown): ParsedApiError {
   ]);
   if (noConfiguredLlm) {
     return createParsedApiError({
-      title: '系统没有配置可用的 LLM 模型',
-      message: '请先在系统设置中配置主模型、可用渠道或相关 API Key 后再重试。',
+      title: t('common.apiError.llmNotConfiguredTitle'),
+      message: t('common.apiError.llmNotConfiguredMessage'),
       rawMessage,
       status,
       category: 'llm_not_configured',
@@ -399,8 +411,8 @@ export function parseApiError(error: unknown): ParsedApiError {
     'reasoning',
   ])) {
     return createParsedApiError({
-      title: '当前模型不兼容工具调用',
-      message: '当前模型不适合 Agent / 工具调用场景，请更换支持工具调用的模型后重试。',
+      title: t('common.apiError.modelToolIncompatibleTitle'),
+      message: t('common.apiError.modelToolIncompatibleMessage'),
       rawMessage,
       status,
       category: 'model_tool_incompatible',
@@ -415,8 +427,8 @@ export function parseApiError(error: unknown): ParsedApiError {
     'invalid function call',
   ])) {
     return createParsedApiError({
-      title: '上游模型返回的数据结构不完整',
-      message: '上游模型返回的工具调用结构不符合要求，请更换模型或关闭相关推理模式后重试。',
+      title: t('common.apiError.invalidToolCallTitle'),
+      message: t('common.apiError.invalidToolCallMessage'),
       rawMessage,
       status,
       category: 'invalid_tool_call',
@@ -425,8 +437,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (includesAny(matchText, ['timeout', 'timed out', 'read timeout', 'connect timeout']) || code === 'ECONNABORTED') {
     return createParsedApiError({
-      title: '连接上游服务超时',
-      message: '服务端访问外部依赖时超时，请稍后重试，或检查当前网络与代理设置。',
+      title: t('common.apiError.upstreamTimeoutTitle'),
+      message: t('common.apiError.upstreamTimeoutMessage'),
       rawMessage,
       status,
       category: 'upstream_timeout',
@@ -448,8 +460,8 @@ export function parseApiError(error: unknown): ParsedApiError {
     ])
   ) {
     return createParsedApiError({
-      title: '服务端无法访问外部依赖',
-      message: '页面已连接到本地服务，但本地服务访问外部模型或数据接口失败，请检查代理、DNS 或出网配置。',
+      title: t('common.apiError.upstreamNetworkTitle'),
+      message: t('common.apiError.upstreamNetworkMessage'),
       rawMessage,
       status,
       category: 'upstream_network',
@@ -464,8 +476,8 @@ export function parseApiError(error: unknown): ParsedApiError {
   ]);
   if (status === 400 && hasLlmProviderHint) {
     return createParsedApiError({
-      title: '上游模型接口拒绝了当前请求',
-      message: '本地服务正常，但上游模型接口拒绝了请求，请检查模型名称、参数格式或工具调用兼容性。',
+      title: t('common.apiError.upstreamLlm400Title'),
+      message: t('common.apiError.upstreamLlm400Message'),
       rawMessage,
       status,
       category: 'upstream_llm_400',
@@ -479,8 +491,8 @@ export function parseApiError(error: unknown): ParsedApiError {
   );
   if (localConnectionFailed) {
     return createParsedApiError({
-      title: '无法连接到本地服务',
-      message: '浏览器当前无法连接到本地 Web 服务，请检查服务是否启动、监听地址是否正确、端口是否开放。',
+      title: t('common.apiError.localConnectionFailedTitle'),
+      message: t('common.apiError.localConnectionFailedMessage'),
       rawMessage,
       status,
       category: 'local_connection_failed',
@@ -489,8 +501,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (payloadText || status) {
     return createParsedApiError({
-      title: '请求失败',
-      message: payloadText ?? `请求未成功完成（HTTP ${status}）。`,
+      title: t('common.apiError.requestFailedTitle'),
+      message: payloadText ?? t('common.apiError.httpStatusMessage', { status: status ?? '' }),
       rawMessage,
       status,
       category: 'http_error',
@@ -498,7 +510,7 @@ export function parseApiError(error: unknown): ParsedApiError {
   }
 
   return createParsedApiError({
-    title: '请求失败',
+    title: t('common.apiError.requestFailedTitle'),
     message: rawMessage,
     rawMessage,
     status,
@@ -506,10 +518,10 @@ export function parseApiError(error: unknown): ParsedApiError {
   });
 }
 
-export function toApiErrorMessage(error: unknown, fallback = '请求未成功完成，请稍后重试。'): string {
+export function toApiErrorMessage(error: unknown, fallback?: string): string {
   const parsed = getParsedApiError(error);
   const message = formatParsedApiError(parsed);
-  return message.trim() || fallback;
+  return message.trim() || fallback || t('common.apiError.retryLater');
 }
 
 export function isAxiosApiError(error: unknown): boolean {

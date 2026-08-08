@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { UI_TEXT } from '../../i18n/uiText';
 import { useAgentChatStore } from '../agentChatStore';
 
 vi.mock('../../api/agent', async (importOriginal) => {
@@ -61,6 +62,9 @@ function createDeferred<T>() {
 
 beforeEach(() => {
   localStorage.clear();
+  // 解析后的错误标题现在跟随界面语言（api/error.ts 不在组件树内，按存储的语言取文案）。
+  // jsdom 的 navigator.language 是 en-US，不钉住就会拿到英文标题。
+  localStorage.setItem('dsa.uiLanguage', 'zh');
   useAgentChatStore.setState({
     messages: [],
     selectedSkillIds: null,
@@ -484,7 +488,7 @@ describe('agentChatStore.startStream', () => {
     });
 
     expect(useAgentChatStore.getState().chatError).toMatchObject({
-      title: '系统没有配置可用的 LLM 模型',
+      title: UI_TEXT.zh['common.apiError.llmNotConfiguredTitle'],
       category: 'llm_not_configured',
       rawMessage: 'Agent LLM: no effective primary model configured',
     });
@@ -505,7 +509,7 @@ describe('agentChatStore.startStream', () => {
     });
 
     expect(useAgentChatStore.getState().chatError).toMatchObject({
-      title: '连接上游服务超时',
+      title: UI_TEXT.zh['common.apiError.upstreamTimeoutTitle'],
       category: 'upstream_timeout',
       rawMessage: 'connect timeout while calling upstream provider',
     });
