@@ -2453,6 +2453,17 @@ class GeminiAnalyzer:
 - Use the common Korean or original listed company name when confident; do not invent one.
 - This includes `stock_name`, `trend_prediction`, `operation_advice`, `confidence_level`, nested dashboard text, checklist items, and all narrative summaries.
 """
+        if lang == "zh-tw":
+            return base_prompt + """
+
+## 輸出語言（最高優先級）
+
+- 所有 JSON 鍵名保持不變。
+- `decision_type` 必須保持為 `buy|hold|sell`。
+- 所有面向使用者的人類可讀文本值必須使用**繁體中文**並採用台灣金融用語。
+- 不得輸出簡體字。此規則適用於所有市場，包含美股、港股、日股、韓股。
+"""
+
         return base_prompt + """
 
 ## 输出语言（最高优先级）
@@ -4234,13 +4245,15 @@ class GeminiAnalyzer:
 正确的股票名称格式为“股票名称（股票代码）”，例如“贵州茅台（600519）”。
 如果上方显示的股票名称为"股票{code}"或不正确，请在分析开头**明确输出该股票的正确中文全称**。
 """
-        # 台股報告以繁體中文（台灣用語）輸出，與大盤復盤的台股路徑保持一致；
-        # cn/hk/us/jp/kr 維持既有簡體輸出，不受影響。
-        if detect_market(code) == "tw":
+        # 繁體輸出的判斷依據是「報告語言」而非「標的市場」：報告是給台灣讀者看的，
+        # 同一份報告裡台股寫繁體、美股寫簡體會造成繁簡混排。保留 tw 市場判斷做 OR，
+        # 讓 tw + zh 的既有行為不變（tests/test_market_strategy.py 有釘住）。
+        if report_language == "zh-tw" or detect_market(code) == "tw":
             prompt += """
-### ⚠️ 重要：台股輸出語言
-本標的為台股，**全文必須使用繁體中文並採用台灣金融用語**（例如：籌碼、權值股、當沖、
-融資融券、伺服器、部位、本益比、股價淨值比），不得輸出簡體字。
+### ⚠️ 重要：輸出語言
+**全文必須使用繁體中文並採用台灣金融用語**（例如：籌碼、權值股、當沖、
+融資融券、伺服器、部位、本益比、股價淨值比、類股、利多、利空、盤整、買進、賣出），
+不得輸出簡體字。此規則適用於所有市場的標的，包含美股、港股、日股、韓股。
 """
         if use_legacy_default_prompt:
             prompt += f"""
@@ -4296,6 +4309,18 @@ class GeminiAnalyzer:
 - This includes `stock_name`, `trend_prediction`, `operation_advice`, `confidence_level`, all nested dashboard text, checklist items, and every summary field.
 - Use the common Korean or original listed company name when you are confident. If not, keep the listed company name rather than inventing one.
 - When data is missing, explain it in Korean instead of Chinese.
+"""
+        elif report_language == "zh-tw":
+            prompt += f"""
+
+### 輸出語言要求（最高優先級）
+- 所有 JSON 鍵名必須保持不變，不要翻譯鍵名。
+- `decision_type` 必須保持為 `buy`、`hold`、`sell`。
+- 所有面向使用者的人類可讀文本值必須使用**繁體中文**並採用台灣金融用語。
+- 不得輸出簡體字；此規則適用於所有市場的標的，包含美股、港股、日股、韓股。
+- 上方 JSON 範例中的示意文字是簡體，**不可照抄**。條列項目的前綴一律改寫為台灣用語的
+  繁體形式，例如 `利好1：` 必須寫成 `利多1：`、`风险点1：` 必須寫成 `風險點1：`。
+- 當資料缺失時，請使用繁體中文直接說明「{no_data_text}，無法判斷」。
 """
         else:
             prompt += f"""
