@@ -13,10 +13,20 @@ import time
 import re
 
 from src.config import Config
-from src.formatters import strip_hidden_markdown_metadata
+from src.formatters import format_telegram_markdown, strip_hidden_markdown_metadata
 
 
 logger = logging.getLogger(__name__)
+
+# Telegram legacy Markdown parses no entities inside code spans, fenced blocks or
+# the ``(url)`` half of a link. Counting those regions is what let a link target
+# such as ``…/5892011_tsmc`` look like an unpaired italic marker.
+_MARKUP_PROTECTED_SPAN_PATTERN = re.compile(
+    r"```.*?```"
+    r"|`[^`\n]*`"
+    r"|\]\([^)]*\)",
+    re.DOTALL,
+)
 
 
 class TelegramSender:
@@ -279,7 +289,9 @@ class TelegramSender:
             if not current_chunk:
                 return all_success
 
-            chunk_content = "\n---\n".join(current_chunk)
+            chunk_content = self._neutralize_unbalanced_markup(
+                "\n---\n".join(current_chunk)
+            )
             logger.info(f"发送 Telegram 消息块 {chunk_index}...")
             chunk_index += 1
             current_chunk = []
@@ -299,8 +311,20 @@ class TelegramSender:
             if len(section) <= limit:
                 return [section]
             chunks: list[str] = []
-            for start in range(0, len(section), limit):
-                chunks.append(section[start:start + limit])
+            remaining = section
+            while len(remaining) > limit:
+                window = remaining[:limit]
+                # Cut on the last line break inside the window so a *bold* pair
+                # opened and closed on one line is never severed. Falling back to
+                # a hard cut only matters for a single line longer than the limit,
+                # which the per-chunk guard below then neutralizes.
+                cut = window.rfind("\n")
+                if cut <= 0:
+                    cut = limit
+                chunks.append(remaining[:cut])
+                remaining = remaining[cut:].lstrip("\n")
+            if remaining:
+                chunks.append(remaining)
             return chunks
 
         for section in sections:
@@ -309,6 +333,7 @@ class TelegramSender:
                 if not _flush_chunk():
                     return False
                 for long_chunk in _split_long_section(section, max_length):
+                    long_chunk = self._neutralize_unbalanced_markup(long_chunk)
                     logger.info(f"发送 Telegram 消息块 {chunk_index}...")
                     chunk_index += 1
                     if not self._send_telegram_message(
@@ -365,38 +390,52 @@ class TelegramSender:
             return False
 
     def _convert_to_telegram_markdown(self, text: str) -> str:
+        """Convert report Markdown to Telegram legacy Markdown.
+
+        Delegates to the shared formatter so Telegram gets the same table
+        flattening every other channel already gets. The private implementation
+        this replaced deleted heading markers outright and passed pipe tables
+        through untouched, which is what made the pushed report a wall of text.
         """
-        将标准 Markdown 转换为 Telegram 支持的格式
+        result = format_telegram_markdown(strip_hidden_markdown_metadata(text))
+        return self._neutralize_unbalanced_markup(result)
 
-        Telegram Markdown 限制：
-        - 不支持 # 标题
-        - 使用 *bold* 而非 **bold**
-        - 使用 _italic_
+    @staticmethod
+    def _neutralize_unbalanced_markup(text: str) -> str:
+        """Drop only the markup chars that are actually left unpaired.
+
+        Telegram rejects the entire message when an entity is left open, and the
+        sender then degrades to unformatted plain text, so a stray ``*``/``_``
+        still has to go. Deleting *every* occurrence whenever the document-wide
+        count happened to be odd - the previous behaviour - silently rewrote
+        link targets (``…/5892011_tsmc`` -> ``…/5892011tsmc``, a dead link that
+        still reads as correct) and threw away every correctly paired ``*bold*``
+        along with the stray one.
+
+        Telegram parses no entities inside code spans, fenced blocks or the
+        ``(url)`` half of a link, so those regions take part in neither the
+        pairing count nor the rewrite. Pairing runs left to right exactly as
+        Telegram does it, so an odd count leaves the final occurrence unmatched
+        and only that one is removed.
         """
-        result = strip_hidden_markdown_metadata(text)
+        if not text:
+            return text
 
-        # 移除 # 标题标记（Telegram 不支持）
-        result = re.sub(r'^#{1,6}\s+', '', result, flags=re.MULTILINE)
+        protected = bytearray(len(text))
+        for match in _MARKUP_PROTECTED_SPAN_PATTERN.finditer(text):
+            start, end = match.span()
+            protected[start:end] = b"\x01" * (end - start)
 
-        # 转换 **bold** 为 *bold*
-        result = re.sub(r'\*\*(.+?)\*\*', r'*\1*', result)
+        drop: set[int] = set()
+        for char in ("*", "_"):
+            positions = [
+                index
+                for index, value in enumerate(text)
+                if value == char and not protected[index]
+            ]
+            if len(positions) % 2:
+                drop.add(positions[-1])
 
-        # Escape special characters for Telegram Markdown, but preserve link syntax [text](url)
-        # Step 1: temporarily protect markdown links
-        import uuid as _uuid
-        _link_placeholder = f"__LINK_{_uuid.uuid4().hex[:8]}__"
-        _links = []
-        def _save_link(m):
-            _links.append(m.group(0))
-            return f"{_link_placeholder}{len(_links) - 1}"
-        result = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _save_link, result)
-
-        # Step 2: escape remaining special chars
-        for char in ['[', ']', '(', ')']:
-            result = result.replace(char, f'\\{char}')
-
-        # Step 3: restore links
-        for i, link in enumerate(_links):
-            result = result.replace(f"{_link_placeholder}{i}", link)
-
-        return result
+        if not drop:
+            return text
+        return "".join(value for index, value in enumerate(text) if index not in drop)

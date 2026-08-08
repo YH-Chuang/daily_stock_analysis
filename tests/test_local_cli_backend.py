@@ -64,9 +64,21 @@ def _config(**overrides):
     return SimpleNamespace(**defaults)
 
 
+# The backend decodes child output as UTF-8, which is what the real presets
+# (Node-based CLIs) emit on every platform. A Python stand-in instead defaults to
+# the locale codepage, so on a non-UTF-8 Windows console it dies with
+# UnicodeEncodeError before printing any CJK. Pin the double to the same UTF-8
+# contract as the CLI it doubles.
+_SCRIPT_UTF8_PREAMBLE = """\
+import sys as _sys
+_sys.stdout.reconfigure(encoding="utf-8")
+_sys.stderr.reconfigure(encoding="utf-8")
+"""
+
+
 def _script(tmp_path: Path, source: str) -> str:
     path = tmp_path / "mock_cli.py"
-    path.write_text(source, encoding="utf-8")
+    path.write_text(_SCRIPT_UTF8_PREAMBLE + source, encoding="utf-8")
     return str(path)
 
 
@@ -379,8 +391,12 @@ print(json.dumps({{"type": "step_finish", "reason": "stop"}}))
     assert "--attach" not in argv
     assert "--dangerously-skip-permissions" not in argv
     assert probe["prompt"] == "prompt from dsa"
-    assert probe["prompt_mode"] == 0o600
-    assert probe["cwd_mode"] == 0o700
+    if os.name != "nt":
+        # POSIX mode bits only. Windows chmod moves the read-only flag and nothing
+        # else, so the owner-only intent is unrepresentable there and the prompt
+        # file reports 0o666 no matter what the backend requests.
+        assert probe["prompt_mode"] == 0o600
+        assert probe["cwd_mode"] == 0o700
     for tool_name in local_cli_backend_module._OPENCODE_DISABLED_TOOL_NAMES:
         assert opencode_config["tools"][tool_name] is False
     assert opencode_config["tools"]["websearch"] is False

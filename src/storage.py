@@ -3315,9 +3315,14 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         获取 Agent 对话历史
         """
         with self.session_scope() as session:
+            # id 兜底排序：两条消息可能落在同一个 created_at（系统时钟精度粗于写入
+            # 间隔时必然发生），仅按 created_at 排序会让同刻消息的先后由数据库任意
+            # 决定，导致对话轮次错乱。与 get_visible_conversation_messages 保持一致。
             stmt = select(ConversationMessage).filter(
                 ConversationMessage.session_id == session_id
-            ).order_by(ConversationMessage.created_at.desc()).limit(limit)
+            ).order_by(
+                ConversationMessage.created_at.desc(), ConversationMessage.id.desc()
+            ).limit(limit)
             messages = session.execute(stmt).scalars().all()
 
             # 倒序返回，保证时间顺序
@@ -3625,10 +3630,11 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         获取单个会话的完整消息列表（用于前端恢复历史）
         """
         with self.session_scope() as session:
+            # 同上：id 兜底排序，避免同一 created_at 的消息顺序由数据库任意决定。
             stmt = (
                 select(ConversationMessage)
                 .where(ConversationMessage.session_id == session_id)
-                .order_by(ConversationMessage.created_at)
+                .order_by(ConversationMessage.created_at, ConversationMessage.id)
                 .limit(limit)
             )
             messages = session.execute(stmt).scalars().all()

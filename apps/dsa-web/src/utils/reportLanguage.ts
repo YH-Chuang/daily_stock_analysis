@@ -1,7 +1,15 @@
 import type { ReportLanguage } from '../types/analysis';
 
+// 后端的 report_language 已支持 zh-tw；这里漏掉它会让繁体报告配上简体界面文案，
+// 而且下方本地重算的标签（情绪、板块联动）会直接盖在繁体正文上方。
 export const normalizeReportLanguage = (value?: string | null): ReportLanguage =>
-  value === 'en' ? 'en' : value === 'ko' ? 'ko' : 'zh';
+  value === 'en'
+    ? 'en'
+    : value === 'ko'
+      ? 'ko'
+      : value === 'zh-tw' || value === 'zh-TW' || value === 'zh_tw'
+        ? 'zh-tw'
+        : 'zh';
 
 const REPORT_TEXT = {
   zh: {
@@ -52,6 +60,57 @@ const REPORT_TEXT = {
     relatedBoards: '关联板块',
     leadingBoard: '领涨',
     laggingBoard: '领跌',
+    neutralBoard: '中性',
+    reanalyze: '重新分析',
+  },
+  'zh-tw': {
+    keyInsights: '核心洞察',
+    noAnalysisSummary: '暫無分析結論',
+    actionAdvice: '操作建議',
+    noAdvice: '暫無建議',
+    trendPrediction: '趨勢預測',
+    noPrediction: '暫無預測',
+    marketSentiment: '市場情緒',
+    strategyPoints: '策略價位',
+    sniperLevels: '狙擊價位',
+    idealBuy: '理想買進',
+    secondaryBuy: '二次買進',
+    stopLoss: '停損價位',
+    takeProfit: '停利目標',
+    noValue: '—',
+    newsFeed: '資訊動態',
+    relatedNews: '相關資訊',
+    refresh: '重新整理',
+    retry: '重試',
+    dismiss: '關閉',
+    details: '查看詳情',
+    loadingNews: '載入資訊中...',
+    noNews: '暫無相關資訊',
+    noNewsDescription: '可稍後重新整理以取得最新資訊。',
+    openLink: '前往',
+    transparency: '透明度',
+    traceability: '資料追溯',
+    rawResult: '原始分析結果',
+    analysisSnapshot: '分析快照',
+    copy: '複製',
+    copied: '已複製',
+    recordId: '紀錄 ID',
+    fullReport: '完整分析報告',
+    loadingReport: '載入報告中...',
+    loadReportFailed: '載入報告失敗',
+    copyMarkdownSource: '複製 Markdown 原始碼',
+    copyPlainText: '複製純文字',
+    generateShareImage: '分享',
+    generatingShareImage: '產生中...',
+    shareImageReadyToShare: '再次點擊分享',
+    shareImageReady: '已產生',
+    shareImageFailed: '重試',
+    analysisModel: '分析模型',
+    fearGreedIndex: '恐懼貪婪指數',
+    boardLinkage: '類股連動',
+    relatedBoards: '關聯類股',
+    leadingBoard: '領漲',
+    laggingBoard: '領跌',
     neutralBoard: '中性',
     reanalyze: '重新分析',
   },

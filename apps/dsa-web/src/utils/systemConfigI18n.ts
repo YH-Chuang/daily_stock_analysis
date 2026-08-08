@@ -309,7 +309,7 @@ const fieldDescriptionMap: Record<string, string> = {
   WEBHOOK_VERIFY_SSL: '发送 HTTPS Webhook 时是否校验证书，公网环境建议保持开启。',
   SINGLE_STOCK_NOTIFY: '启用后按个股分别推送通知；关闭则合并为单条消息。',
   REPORT_TYPE: '通知报告展示粒度（如 simple/full/brief）。',
-  REPORT_LANGUAGE: '报告与 Agent Chat 默认输出语言（zh/en/ko）；仅在问股未显式传入 context.report_language 时生效。',
+  REPORT_LANGUAGE: '报告与 Agent Chat 默认输出语言（zh/zh-tw/en/ko）；仅在问股未显式传入 context.report_language 时生效。',
   REPORT_TEMPLATES_DIR: '自定义报告模板目录路径。',
   REPORT_INTEGRITY_ENABLED: '启用报告完整性检查，避免发送缺字段或异常内容。',
   REPORT_RENDERER_ENABLED: '启用报告渲染器，将结构化数据渲染为最终通知内容。',
@@ -398,7 +398,8 @@ const fieldOptionLabelMap: Record<string, Record<string, string>> = {
     brief: '简报',
   },
   REPORT_LANGUAGE: {
-    zh: '中文',
+    zh: '简体中文',
+    'zh-tw': '繁体中文（台湾）',
     en: '英文',
     ko: '韩文',
     chinese: '中文',
@@ -482,7 +483,8 @@ const fieldOptionLabelMapEn: Record<string, Record<string, string>> = {
     brief: 'Brief',
   },
   REPORT_LANGUAGE: {
-    zh: 'Chinese',
+    zh: 'Simplified Chinese',
+    'zh-tw': 'Traditional Chinese (Taiwan)',
     en: 'English',
     ko: 'Korean',
     chinese: 'Chinese',

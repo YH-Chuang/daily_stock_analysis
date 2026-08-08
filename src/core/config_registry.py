@@ -2549,7 +2549,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "REPORT_LANGUAGE": {
         "title": "Report Language",
-        "description": "Default output language for reports, Agent Chat fallback replies, and notification templates. Supported values: zh, en, ko.",
+        "description": "Default output language for reports, Agent Chat fallback replies, and notification templates. Supported values: zh, zh-tw, en, ko.",
         "category": "notification",
         "data_type": "string",
         "ui_control": "select",
@@ -2559,14 +2559,16 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": "zh",
         "options": [
             {"label": "Chinese", "value": "zh"},
+            {"label": "Traditional Chinese (Taiwan)", "value": "zh-tw"},
             {"label": "English", "value": "en"},
             {"label": "Korean", "value": "ko"},
         ],
-        "validation": {"enum": ["zh", "en", "ko"]},
+        "validation": {"enum": ["zh", "zh-tw", "en", "ko"]},
         "display_order": 56,
         "help_key": "settings.notification.report_output",
         "examples": [
             "REPORT_LANGUAGE=zh",
+            "REPORT_LANGUAGE=zh-tw",
             "REPORT_LANGUAGE=en",
             "REPORT_LANGUAGE=ko",
         ],
@@ -3441,7 +3443,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "MARKET_REVIEW_REGION": {
         "title": "Market Review Region",
-        "description": "Market region for review: cn (A-shares), hk (Hong Kong), us (US stocks), jp (Japan), kr (Korea), or both (all markets).",
+        "description": "Market region for review: cn (A-shares), hk (Hong Kong), us (US stocks), jp (Japan), kr (Korea), tw (Taiwan), or both (all markets).",
         "category": "system",
         "data_type": "string",
         "ui_control": "text",
@@ -3449,13 +3451,14 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_required": False,
         "is_editable": True,
         "default_value": "cn",
-        "options": ["cn", "hk", "us", "jp", "kr", "both"],
-        "validation": {"allowed_values": ["cn", "hk", "us", "jp", "kr", "both"], "delimiter": ","},
+        "options": ["cn", "hk", "us", "jp", "kr", "tw", "both"],
+        "validation": {"allowed_values": ["cn", "hk", "us", "jp", "kr", "tw", "both"], "delimiter": ","},
         "display_order": 48,
         "help_key": "settings.system.market_review",
         "examples": [
             "MARKET_REVIEW_REGION=cn",
             "MARKET_REVIEW_REGION=jp",
+            "MARKET_REVIEW_REGION=tw",
             "MARKET_REVIEW_REGION=both",
         ],
         "docs": [

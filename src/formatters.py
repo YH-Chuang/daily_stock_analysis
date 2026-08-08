@@ -867,6 +867,10 @@ def _format_telegram_markdown_unprotected(content: str) -> str:
 
     result = _markdown_tables_to_key_value_rows_unprotected(content, bullet="-")
     result = re.sub(r'^#{1,6}\s+(.+)$', r'*\1*', result, flags=re.MULTILINE)
+    # Normalise `*`/`+` bullets to a literal bullet BEFORE collapsing **bold**.
+    # Otherwise `*   **x**` becomes `*   *x*` - an odd number of asterisks on one
+    # line, which Telegram parses as an unterminated bold entity and rejects.
+    result = re.sub(r'^(\s*)[*+]\s+', r'\1• ', result, flags=re.MULTILINE)
     result = re.sub(r'\*\*(.+?)\*\*', r'*\1*', result)
     result = re.sub(r'^\s*---+\s*$', '────────', result, flags=re.MULTILINE)
     result = _escape_telegram_non_link_markdown_chars(result)
@@ -883,7 +887,9 @@ def _escape_telegram_non_link_markdown_chars(content: str) -> str:
         return f"@@DSA_TELEGRAM_LINK_{len(links) - 1}@@"
 
     result = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _save_link, content)
-    for char in ("[", "]", "(", ")"):
+    # Legacy Markdown only unescapes _ * ` [ - escaping ( ) would render the
+    # backslashes literally, so only the bracket pair is escaped here.
+    for char in ("[", "]"):
         result = result.replace(char, f"\\{char}")
 
     for index, link in enumerate(links):

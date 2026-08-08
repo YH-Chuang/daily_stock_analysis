@@ -624,6 +624,8 @@ class DataFetcherManager:
         "PytdxFetcher": {"cn"},
         "BaostockFetcher": {"cn"},
         "YfinanceFetcher": {"cn", "hk", "us", "jp", "kr", "tw"},
+        # 台股專用：TWSE / TPEx 官方 RWD 端點，僅在 Yahoo 也失敗時作為兜底（P6）。
+        "TwQuoteFetcher": {"tw"},
         "LongbridgeFetcher": {"hk", "us"},
         "FinnhubFetcher": {"us"},
         "AlphaVantageFetcher": {"us"},
@@ -1154,6 +1156,7 @@ class DataFetcherManager:
           3. BaostockFetcher (Priority 3)
           4. YfinanceFetcher (Priority 4)
           5. TencentFetcher (Priority 5) - A 股最终兜底
+          6. TwQuoteFetcher (Priority 6) - 台股（.TW/.TWO）官方行情兜底，无需 API Key
         """
         from src.config import get_config
         from .efinance_fetcher import EfinanceFetcher
@@ -1165,6 +1168,7 @@ class DataFetcherManager:
         from .baostock_fetcher import BaostockFetcher
         from .yfinance_fetcher import YfinanceFetcher
         from .longbridge_fetcher import LongbridgeFetcher
+        from .tw_quote_fetcher import TwQuoteFetcher
         config = get_config()
         # 创建所有数据源实例（优先级在各 Fetcher 的 __init__ 中确定）
         efinance = EfinanceFetcher()
@@ -1173,6 +1177,9 @@ class DataFetcherManager:
         pytdx = PytdxFetcher()      # 通达信数据源（可配 PYTDX_HOST/PYTDX_PORT）
         baostock = BaostockFetcher()
         yfinance = YfinanceFetcher()
+        # 台股官方行情兜底：不需要任何 API Key，无条件加入；
+        # 由 _DAILY_MARKET_FETCHER_SUPPORT 限定只服务 tw，其它市场的日线路由会跳过它。
+        tw_quote = TwQuoteFetcher()
         optional_fetchers: List[BaseFetcher] = []
 
         tushare_token = (getattr(config, "tushare_token", None) or "").strip()
@@ -1224,6 +1231,7 @@ class DataFetcherManager:
                 baostock,
                 yfinance,
                 tencent,
+                tw_quote,
                 *optional_fetchers,
             ]
 

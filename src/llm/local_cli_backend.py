@@ -2895,10 +2895,21 @@ def _executable_summary(path: str) -> Dict[str, str]:
     }
 
 
+def _normalize_newlines(text: str) -> str:
+    """把 CRLF / CR 统一成 LF。
+
+    子进程 CLI 沿用所在平台的换行约定（Windows 上是 CRLF）。残留的 \\r 有两个害处：
+    一是按行锚定的脱敏规则可能因行尾多一个字符而匹配失败，导致本该遮蔽的凭据泄漏到
+    诊断信息里；二是它会原样进入日志和 JSON 错误载荷，变成 \\r\\n 噪音。诊断预览是
+    纯文本消费的，统一换行可让预览及其脱敏结果在所有平台上完全一致。
+    """
+    return (text or "").replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _preview_diagnostics(stdout: str, stderr: str) -> Dict[str, str]:
     return {
-        "stdout_preview": redact_diagnostic_text(stdout or ""),
-        "stderr_preview": redact_diagnostic_text(stderr or ""),
+        "stdout_preview": redact_diagnostic_text(_normalize_newlines(stdout)),
+        "stderr_preview": redact_diagnostic_text(_normalize_newlines(stderr)),
     }
 
 

@@ -58,10 +58,16 @@ class MarketLightServiceTestCase(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_normalize_market_region_rejects_unknown_regions(self) -> None:
-        for region in ("global", "tw"):
+        for region in ("global", "eu"):
             with self.subTest(region=region):
-                with self.assertRaisesRegex(ValueError, "cn, hk, us, jp, kr"):
+                with self.assertRaisesRegex(ValueError, "cn, hk, us, jp, kr, tw"):
                     normalize_market_region(region)
+
+    def test_normalize_market_region_accepts_supported_regions(self) -> None:
+        # 台股（tw）与 jp/kr 一样属于受支持的大盘复盘区域。
+        for region, expected in (("jp", "jp"), ("kr", "kr"), ("tw", "tw"), (" TW ", "tw")):
+            with self.subTest(region=region):
+                self.assertEqual(normalize_market_region(region), expected)
 
     def _add_history(self, *, created_at: datetime, context_snapshot: dict | None) -> None:
         with self.db.get_session() as session:

@@ -2899,6 +2899,7 @@ class TestMarketAnalyzerBypassFix:
         [
             ("jp", "JP_PROFILE", "N225", "Nikkei 225", "Japan Market Recap", "今日日股市场整体呈现"),
             ("kr", "KR_PROFILE", "KS11", "KOSPI", "Korea Market Recap", "今日韩股市场整体呈现"),
+            ("tw", "TW_PROFILE", "TWII", "台湾加权指数", "Taiwan Market Recap", "今日台股市场整体呈现"),
         ],
     )
     def test_generate_template_review_uses_jp_kr_labels_for_no_llm_fallback(
@@ -2906,7 +2907,7 @@ class TestMarketAnalyzerBypassFix:
     ):
         import src.core.market_profile as market_profile
         from src.core.market_strategy import get_market_strategy_blueprint
-        from src.market_analyzer import MarketOverview, MarketIndex
+        from src.market_analyzer import MarketAnalyzer, MarketOverview, MarketIndex
 
         ma = self._make_market_analyzer_with_mock_generate_text(return_value=None)
         ma.region = region
@@ -2925,15 +2926,17 @@ class TestMarketAnalyzerBypassFix:
             ],
         )
 
-        ma.config.report_language = "en"
-        english_result = ma.generate_market_review(overview, [])
-        assert f"## 2026-03-05 {english_title}" in english_result
-        assert "A-share Market Recap" not in english_result
+        # tw 的補充區塊會打 TPEx 真實網路，這裡與其他既有 region 一樣 mock 掉（不影響斷言）。
+        with patch.object(MarketAnalyzer, "_build_tw_supplement_block", return_value=""):
+            ma.config.report_language = "en"
+            english_result = ma.generate_market_review(overview, [])
+            assert f"## 2026-03-05 {english_title}" in english_result
+            assert "A-share Market Recap" not in english_result
 
-        ma.config.report_language = "zh"
-        zh_result = ma.generate_market_review(overview, [])
-        assert zh_label in zh_result
-        assert "今日A股市场整体呈现" not in zh_result
+            ma.config.report_language = "zh"
+            zh_result = ma.generate_market_review(overview, [])
+            assert zh_label in zh_result
+            assert "今日A股市场整体呈现" not in zh_result
 
     def test_inject_data_into_review_matches_english_headings(self):
         from src.market_analyzer import MarketOverview, MarketIndex
@@ -2983,6 +2986,54 @@ Sector text.
         assert "| 1 | AI算力 | +3.25% |" in result
         assert "#### Lagging Industry Sectors" in result
         assert "| 1 | 煤炭 | -1.12% |" in result
+
+    def test_inject_data_into_review_matches_traditional_chinese_headings(self):
+        """A Traditional review must receive the injected tables too.
+
+        _CHINESE_SECTION_PATTERNS matched Simplified headings only, so when the
+        model correctly obeyed the zh-tw 繁體 instruction and wrote 「### 二、指數結構」
+        nothing matched and the index table was silently dropped - Simplified
+        output got the data, Traditional output lost it, with no error either way.
+        """
+        from src.market_analyzer import MarketOverview, MarketIndex
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value="review")
+        overview = MarketOverview(
+            date="2026-03-05",
+            indices=[
+                MarketIndex(
+                    code="TWII",
+                    name="台灣加權指數",
+                    current=44225.91,
+                    change=-168.0,
+                    change_pct=-0.38,
+                    open=44450.19,
+                    high=44827.13,
+                    low=44100.0,
+                    amount=145000000000.0,
+                    amplitude=1.6,
+                )
+            ],
+        )
+        review = """## 2026-03-05 台灣市場大盤復盤
+
+### 一、盤面總覽
+總結。
+
+### 二、指數結構
+指數。
+
+### 五、消息催化
+新聞。
+"""
+
+        result = ma._inject_data_into_review(review, overview, [])
+
+        # The whole point: the table reached the report despite Traditional headings.
+        assert "台灣加權指數" in result
+        assert "44225.91" in result
+        # And the Traditional headings themselves survive untouched.
+        assert "### 二、指數結構" in result
 
     def test_inject_data_into_review_matches_reference_style_chinese_headings(self):
         from src.market_analyzer import MarketOverview, MarketIndex

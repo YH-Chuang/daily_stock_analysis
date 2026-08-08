@@ -6,6 +6,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Dict, Iterable, List, Optional
 
+from src.report_language import choose_report_text
+
 
 BLOCK_LABELS_ZH = {
     "quote": "行情",
@@ -267,7 +269,9 @@ def _block_lines(payload: Dict[str, Any], *, lang: str) -> List[str]:
             reason_label = "missing_reason" if lang == "en" else "missing_reason"
             parts.append(f"{reason_label}={_join_text(reasons, lang=lang)}")
 
-        lines.append("；".join(parts) if lang == "zh" else "; ".join(parts))
+        lines.append(
+            choose_report_text(lang, zh="；".join(parts), zh_tw="；".join(parts), other="; ".join(parts))
+        )
     return lines
 
 

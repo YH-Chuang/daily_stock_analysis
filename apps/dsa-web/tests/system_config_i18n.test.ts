@@ -129,7 +129,11 @@ describe('systemConfigI18n option label localization', () => {
     ['REPORT_TYPE', 'simple', undefined, '简洁'],
     ['REPORT_TYPE', 'full', undefined, '完整'],
     ['REPORT_TYPE', 'brief', undefined, '简报'],
-    ['REPORT_LANGUAGE', 'zh', 'Chinese', '中文'],
+    // 同一个下拉里现在有两个中文选项，'中文' 无法与 '繁体中文（台湾）' 区分，
+    // 因此 zh 的标签写明 '简体中文'。zh-tw 此前没有中文标签，会回退显示后端
+    // 的英文 fallback 'Traditional Chinese (Taiwan)'。
+    ['REPORT_LANGUAGE', 'zh', 'Chinese', '简体中文'],
+    ['REPORT_LANGUAGE', 'zh-tw', 'Traditional Chinese (Taiwan)', '繁体中文（台湾）'],
     ['REPORT_LANGUAGE', 'en', 'English', '英文'],
     ['REPORT_LANGUAGE', 'ko', 'Korean', '韩文'],
     ['NOTIFICATION_MIN_SEVERITY', '', 'Not set', '未设置'],

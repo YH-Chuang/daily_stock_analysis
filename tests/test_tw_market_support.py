@@ -96,17 +96,23 @@ def test_yfinance_keeps_tw_suffix_codes_and_indices() -> None:
 
     captured = []
 
-    def fake_fetch(_yf, yf_code, name, return_code):
-        captured.append((yf_code, name, return_code))
-        return {"code": return_code, "name": name, "current": 1.0}
+    def fake_batch_fetch(_yf, symbol_map):
+        for return_code, (yf_code, name) in symbol_map.items():
+            captured.append((yf_code, name, return_code))
+        return [
+            {"code": return_code, "name": name, "current": 1.0}
+            for return_code, (_yf_code, name) in symbol_map.items()
+        ]
 
-    fetcher._fetch_yf_ticker_data = fake_fetch  # type: ignore[method-assign]
+    fetcher._fetch_yf_batch_data = fake_batch_fetch  # type: ignore[method-assign]
 
     tw_indices = fetcher.get_main_indices("tw") or []
 
-    assert {item["code"] for item in tw_indices} == {"TWII", "TWOII"}
-    assert ("^TWII", "台湾加权指数", "TWII") in captured
-    assert ("^TWOII", "台湾柜买指数", "TWOII") in captured
+    # 柜买指数 ^TWOII 在 Yahoo Finance 无数据，改用费城半导体指数 ^SOX。
+    assert {item["code"] for item in tw_indices} == {"TWII", "SOX"}
+    assert ("^TWII", "台灣加權指數", "TWII") in captured
+    assert ("^SOX", "費城半導體指數", "SOX") in captured
+    assert not any(yf_code == "^TWOII" for yf_code, _name, _code in captured)
 
 
 def test_data_fetcher_manager_routes_tw_daily_only_to_yfinance() -> None:

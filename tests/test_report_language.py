@@ -86,6 +86,50 @@ class ReportLanguageTestCase(unittest.TestCase):
             "hold",
         )
 
+    def test_negated_advice_is_not_read_as_the_decision_it_negates(self) -> None:
+        """否定句不得被判成它所否定的那个动作（简繁两种字形都要成立）。
+
+        report_language=zh-tw 时模型输出的是繁体，此前否定词表只有简体字形，
+        「不建議買進」会被判成 buy，把不建议买入的结论呈现成买入信号。
+        """
+        for advice in (
+            "不建议买入",
+            "不应买入",
+            "不应当买入",
+            "暂不建议买入",
+            "暂时不建议买入",
+            "并非买入时机",
+            "并未出现买入信号",
+            "没有买入信号",
+            "无买入信号",
+            "不建議買進",
+            "不應買進",
+            "不應當買進",
+            "暫不建議買進",
+            "暫時不建議買進",
+            "並非買進時機",
+            "並未出現買進訊號",
+            "沒有買進訊號",
+            "無買進訊號",
+        ):
+            with self.subTest(advice=advice):
+                self.assertNotEqual(infer_decision_type_from_advice(advice, default=""), "buy")
+
+        for advice in ("不建议卖出", "不建議賣出", "不應賣出", "並未出現賣出訊號"):
+            with self.subTest(advice=advice):
+                self.assertNotEqual(infer_decision_type_from_advice(advice, default=""), "sell")
+
+    def test_traditional_affirmative_advice_still_resolves(self) -> None:
+        """否定词补繁体字形后，未被否定的繁体建议不得被误判为否定。"""
+        self.assertEqual(infer_decision_type_from_advice("建議買進"), "buy")
+        self.assertEqual(infer_decision_type_from_advice("建議持有"), "hold")
+        self.assertEqual(infer_decision_type_from_advice("建議減碼"), "sell")
+        self.assertEqual(infer_decision_type_from_advice("繼續持有"), "hold")
+        # 「無」「出現」只有紧跟在否定词后面才参与否定判定，不得吃掉正常语句。
+        self.assertEqual(infer_decision_type_from_advice("無論如何買進"), "buy")
+        self.assertEqual(infer_decision_type_from_advice("出現買進訊號"), "buy")
+        self.assertEqual(infer_decision_type_from_advice("不跌破支撐繼續持有"), "hold")
+
 
 class KoreanReportLanguageTestCase(unittest.TestCase):
     def test_korean_is_supported(self) -> None:

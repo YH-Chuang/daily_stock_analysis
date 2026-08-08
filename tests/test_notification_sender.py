@@ -1905,7 +1905,7 @@ class TestTelegramSender(unittest.TestCase):
         self.assertTrue(result)
         first_payload = mock_post.call_args_list[0][1]["json"]
         second_payload = mock_post.call_args_list[1][1]["json"]
-        self.assertEqual(first_payload["text"], "关注 *AAPL* \\(未闭合\\)")
+        self.assertEqual(first_payload["text"], "关注 *AAPL* (未闭合)")
         self.assertEqual(second_payload["text"], content)
 
     @mock.patch("src.notification_sender.telegram_sender.requests.post")
@@ -1929,7 +1929,10 @@ class TestTelegramSender(unittest.TestCase):
         rendered = payload["text"]
         self.assertIn("日报", rendered)
         self.assertIn("📊 分析结果摘要", rendered)
-        self.assertIn("| 股票 | 信号 |", rendered)
+        # Telegram renders Markdown tables in no parse mode, so the shared
+        # formatter flattens them to key：value rows instead of shipping pipes.
+        self.assertNotIn("| 股票 | 信号 |", rendered)
+        self.assertIn("600519：强势", rendered)
         self.assertIn("[详情](https://example.com/report)", rendered)
         self.assertNotIn("# 日报", rendered)
 
@@ -1988,7 +1991,10 @@ class TestTelegramSender(unittest.TestCase):
         mock_post.return_value = _response(200, {"ok": True})
         cfg = _config(telegram_bot_token="BOT", telegram_chat_id="CHAT")
         sender = TelegramSender(cfg)
-        content = "(" * 4090
+        # Brackets are still escaped ( [ -> \\[ ), so the converted payload is
+        # twice the input length. Parens are deliberately no longer escaped, so
+        # they would no longer grow past the limit and the split would not fire.
+        content = "[" * 4090
 
         result = sender.send_to_telegram(content)
 
@@ -1997,6 +2003,100 @@ class TestTelegramSender(unittest.TestCase):
         payload_texts = [call.kwargs["json"]["text"] for call in mock_post.call_args_list]
         self.assertTrue(all(len(text) <= 4096 for text in payload_texts))
         self.assertEqual("".join(payload_texts), sender._convert_to_telegram_markdown(content))
+
+    @mock.patch("src.notification_sender.telegram_sender.requests.post")
+    def test_chunks_never_split_a_bold_pair(self, mock_post):
+        """A balanced payload must not become unbalanced once chunked.
+
+        The chunker used to slice at exactly max_length, which could sever a
+        *bold* pair. Each half then carried an odd number of asterisks, Telegram
+        rejected both, and the sender silently degraded the whole report to
+        unformatted plain text - the failure looked like a formatting quirk but
+        cost every message its formatting.
+        """
+        mock_post.return_value = _response(200, {"ok": True})
+        cfg = _config(telegram_bot_token="BOT", telegram_chat_id="CHAT")
+        sender = TelegramSender(cfg)
+        # Long enough to force several chunks, with a bold pair on every line so
+        # a naive fixed-offset cut is almost certain to land inside one.
+        content = "\n".join(f"**粗體段落 {i}** 內文內容內容內容" for i in range(400))
+
+        self.assertTrue(sender.send_to_telegram(content))
+
+        sent = [
+            call.kwargs["json"]["text"]
+            for call in mock_post.call_args_list
+            if "json" in call.kwargs and "text" in call.kwargs["json"]
+        ]
+        self.assertGreaterEqual(len(sent), 2)
+        for index, text in enumerate(sent, start=1):
+            self.assertEqual(
+                text.count("*") % 2,
+                0,
+                f"chunk {index} left an unclosed bold entity: {text.count('*')} asterisks",
+            )
+            self.assertLessEqual(len(text), 4096)
+
+        # The even-count assertion above is guaranteed by the per-chunk
+        # neutralizer and would still hold if the chunker went back to slicing at
+        # a fixed offset - the neutralizer would simply delete the severed
+        # asterisk. What actually costs the user their formatting is the bold run
+        # disappearing, so assert the runs survive: a severed pair loses one
+        # asterisk to the neutralizer on each side of the cut and can no longer
+        # be found in the delivered text.
+        delivered = "".join(sent)
+        for index in range(400):
+            self.assertIn(
+                f"*粗體段落 {index}*",
+                delivered,
+                f"bold run {index} was severed by the chunker and stripped",
+            )
+
+    @mock.patch("src.notification_sender.telegram_sender.requests.post")
+    def test_unbalanced_markup_never_rewrites_link_targets(self, mock_post):
+        """A stray marker must not cost the report its links.
+
+        The neutralizer used to delete every ``*``/``_`` in the document whenever
+        the document-wide count was odd. An underscore inside a link target was
+        counted like an italic marker and deleted with the rest, so the pushed
+        link 404s while still reading as correct - silent corruption with no log
+        line and a successful send.
+        """
+        mock_post.return_value = _response(200, {"ok": True})
+        cfg = _config(telegram_bot_token="BOT", telegram_chat_id="CHAT")
+        sender = TelegramSender(cfg)
+        url = "https://news.cnyes.com/news/id/5892011_tsmc"
+        # One link (two underscores in the target) plus a stray asterisk, so the
+        # document-wide asterisk count is odd and the old code fired.
+        content = f"# 台股盤後快報\n\n- [台積電法說會紀要]({url})\n- 觀察 *籌碼變化\n"
+
+        self.assertTrue(sender.send_to_telegram(content))
+
+        delivered = "".join(
+            call.kwargs["json"]["text"]
+            for call in mock_post.call_args_list
+            if "json" in call.kwargs and "text" in call.kwargs["json"]
+        )
+        self.assertIn(url, delivered)
+        self.assertEqual(delivered.count("*") % 2, 0)
+
+    @mock.patch("src.notification_sender.telegram_sender.requests.post")
+    def test_unbalanced_markup_keeps_balanced_pairs(self, mock_post):
+        """Only the unmatched marker goes; correctly paired styling stays."""
+        mock_post.return_value = _response(200, {"ok": True})
+        cfg = _config(telegram_bot_token="BOT", telegram_chat_id="CHAT")
+        sender = TelegramSender(cfg)
+        content = "**核心結論**：偏多\n\n未收尾的星號 *\n"
+
+        self.assertTrue(sender.send_to_telegram(content))
+
+        delivered = "".join(
+            call.kwargs["json"]["text"]
+            for call in mock_post.call_args_list
+            if "json" in call.kwargs and "text" in call.kwargs["json"]
+        )
+        self.assertIn("*核心結論*", delivered)
+        self.assertEqual(delivered.count("*") % 2, 0)
 
     @mock.patch("src.notification_sender.telegram_sender.requests.post")
     def test_send_plain_text_fallback_handles_non_json_200(self, mock_post):

@@ -35,12 +35,37 @@ def _make_mock_hist(close: float, prev_close: float, high: float = None, low: fl
 
 
 def _make_mock_yf(hist_df: pd.DataFrame):
-    """构造模拟的 yf 模块，Ticker().history() 返回给定 DataFrame"""
-    mock_ticker = MagicMock()
-    mock_ticker.history.return_value = hist_df
+    """构造模拟的 yf 模块，download() 对所有请求代码返回同一份 DataFrame（MultiIndex 列）"""
+    def download(tickers, **kwargs):
+        if hist_df.empty or not list(tickers):
+            return pd.DataFrame()
+        return pd.concat({symbol: hist_df for symbol in tickers}, axis=1)
+
     mock_yf = MagicMock()
-    mock_yf.Ticker.return_value = mock_ticker
+    mock_yf.download.side_effect = download
     return mock_yf
+
+
+def _make_mock_yf_per_symbol(frames):
+    """构造模拟的 yf 模块，download() 只返回 frames 中存在的代码（模拟部分代码无数据）"""
+    def download(tickers, **kwargs):
+        available = {symbol: frames[symbol] for symbol in tickers if symbol in frames}
+        if not available:
+            return pd.DataFrame()
+        return pd.concat(available, axis=1)
+
+    mock_yf = MagicMock()
+    mock_yf.download.side_effect = download
+    return mock_yf
+
+
+def _downloaded_tickers(mock_yf) -> list:
+    """收集 yf.download() 收到的全部代码"""
+    tickers = []
+    for call in mock_yf.download.call_args_list:
+        value = call.kwargs.get('tickers', call.args[0] if call.args else [])
+        tickers.extend(value)
+    return tickers
 
 
 class TestHkIndexSymbolMapping(unittest.TestCase):
@@ -52,15 +77,12 @@ class TestHkIndexSymbolMapping(unittest.TestCase):
 
     def test_hk_indices_mapping_symbols(self):
         """港股指数映射应使用正确的 Yahoo Finance 符号"""
-        mock_yf = MagicMock()
-        mock_ticker = MagicMock()
-        mock_ticker.history.return_value = pd.DataFrame()
-        mock_yf.Ticker.return_value = mock_ticker
+        mock_yf = _make_mock_yf(pd.DataFrame())
 
         self.fetcher._get_hk_main_indices(mock_yf)
 
-        # 收集所有 Ticker() 调用的参数
-        ticker_calls = [call.args[0] for call in mock_yf.Ticker.call_args_list]
+        # 收集 yf.download() 请求的全部代码
+        ticker_calls = _downloaded_tickers(mock_yf)
 
         self.assertIn('^HSI', ticker_calls, '恒生指数应使用 ^HSI')
         self.assertIn('HSTECH.HK', ticker_calls, '恒生科技指数应使用 HSTECH.HK，而非 ^HSTECH')
@@ -68,14 +90,11 @@ class TestHkIndexSymbolMapping(unittest.TestCase):
 
     def test_hk_indices_mapping_no_invalid_symbols(self):
         """确保不再使用已知错误的旧映射符号"""
-        mock_yf = MagicMock()
-        mock_ticker = MagicMock()
-        mock_ticker.history.return_value = pd.DataFrame()
-        mock_yf.Ticker.return_value = mock_ticker
+        mock_yf = _make_mock_yf(pd.DataFrame())
 
         self.fetcher._get_hk_main_indices(mock_yf)
 
-        ticker_calls = [call.args[0] for call in mock_yf.Ticker.call_args_list]
+        ticker_calls = _downloaded_tickers(mock_yf)
 
         self.assertNotIn('^HSTECH', ticker_calls, '^HSTECH 不是有效的 Yahoo Finance 符号')
         self.assertNotIn('^HSCEI', ticker_calls, '^HSCEI 不是有效的 Yahoo Finance 符号')
@@ -130,25 +149,17 @@ class TestGetHkMainIndices(unittest.TestCase):
         self.assertAlmostEqual(item['amplitude'], expected_amplitude)
 
     def test_handles_partial_failure(self):
-        """部分指数 history 为空时仍返回能取到数据的指数"""
-        call_count = [0]
-
-        def history_side_effect(period):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return _make_mock_hist(close=20000.0, prev_close=19800.0)
-            return pd.DataFrame()
-
-        mock_ticker = MagicMock()
-        mock_ticker.history.side_effect = history_side_effect
-        mock_yf = MagicMock()
-        mock_yf.Ticker.return_value = mock_ticker
+        """部分指数无数据时仍返回能取到数据的指数"""
+        mock_yf = _make_mock_yf_per_symbol(
+            {'^HSI': _make_mock_hist(close=20000.0, prev_close=19800.0)}
+        )
 
         result = self.fetcher._get_hk_main_indices(mock_yf)
 
         self.assertIsNotNone(result)
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['code'], 'HSI')
 
     def test_returns_none_when_all_fail(self):
         """全部取数失败时返回 None"""
@@ -158,12 +169,10 @@ class TestGetHkMainIndices(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    def test_handles_ticker_exception(self):
-        """Ticker.history 抛异常时跳过该指数，不整体失败"""
-        mock_ticker = MagicMock()
-        mock_ticker.history.side_effect = Exception("Network error")
+    def test_handles_download_exception(self):
+        """yf.download 抛异常时降级返回 None，不向上抛出"""
         mock_yf = MagicMock()
-        mock_yf.Ticker.return_value = mock_ticker
+        mock_yf.download.side_effect = Exception("Network error")
 
         result = self.fetcher._get_hk_main_indices(mock_yf)
 

@@ -124,15 +124,15 @@ class TestTwInstitutionPrompt(unittest.TestCase):
 
     def test_institution_injected_when_ok(self):
         p = self._prompt({"institution": {"status": "ok", "data": dict(_INST_REC)}})
-        self.assertIn("三大法人动向", p)
-        for token in ("外资", "投信", "自营商", "筹码过滤器"):
+        self.assertIn("三大法人動向", p)
+        for token in ("外資", "投信", "自營商", "籌碼過濾器"):
             self.assertIn(token, p)
         self.assertIn("-1912490", p)   # raw foreign_net reaches the prompt
         self.assertIn("-862914", p)    # raw total_net
 
     def test_institution_absent_when_not_supported(self):
         p = self._prompt({"institution": {"status": "not_supported", "data": {}}})
-        self.assertNotIn("三大法人动向", p)
+        self.assertNotIn("三大法人動向", p)
 
     def test_institution_absent_when_any_core_net_missing(self):
         # prompt gate matches the render / base.py gate: ALL four core nets required,

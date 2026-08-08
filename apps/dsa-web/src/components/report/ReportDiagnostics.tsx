@@ -63,6 +63,36 @@ const TEXT = {
       skipped: '已跳过',
     },
   },
+  'zh-tw': {
+    eyebrow: '執行診斷',
+    title: '執行狀態',
+    loading: '診斷載入中...',
+    unavailable: '執行診斷暫不可用',
+    noComponents: '暫無元件診斷',
+    components: '關鍵鏈路',
+    advanced: '進階欄位',
+    copy: '複製排障資訊',
+    copied: '已複製',
+    scope: '抓取 / LLM / 儲存 / 通知鏈路',
+    trace: 'Trace',
+    task: 'Task',
+    query: 'Query',
+    trigger: '觸發來源',
+    overall: {
+      normal: '正常',
+      degraded: '部分降級',
+      failed: '失敗',
+      unknown: '未知',
+    },
+    component: {
+      ok: '正常',
+      degraded: '最近失敗後已降級',
+      failed: '失敗',
+      unknown: '未知',
+      not_configured: '未設定',
+      skipped: '已略過',
+    },
+  },
   en: {
     eyebrow: 'RUN DIAGNOSTICS',
     title: 'Run Status',
@@ -170,7 +200,9 @@ export const ReportDiagnostics: React.FC<ReportDiagnosticsProps> = ({
 }) => {
   const reportLanguage = normalizeReportLanguage(language);
   const text = TEXT[reportLanguage];
-  const runFlowText = UI_TEXT[reportLanguage === 'ko' ? 'en' : reportLanguage];
+  // UI_TEXT 只有 zh / en 两种界面语言：ko 沿用 en，zh-tw 收敛到 zh。
+  const runFlowText =
+    UI_TEXT[reportLanguage === 'ko' || reportLanguage === 'en' ? 'en' : 'zh'];
   const [fetchState, setFetchState] = useState<{
     recordId?: number;
     summary: RunDiagnosticSummary | null;

@@ -60,12 +60,17 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         cases = [
             (None, ["cn"]),
             ("", ["cn"]),
+            # both 不含 tw：tw 併入 both 會讓既有 both 部署無聲多跑一次台股複盤。
             ("both", ["cn", "hk", "us", "jp", "kr"]),
+            ("cn,hk,us,jp,kr,tw", ["cn", "hk", "us", "jp", "kr", "tw"]),
             (" CN,US,cn ", ["cn", "us"]),
             ("us,cn,us", ["cn", "us"]),
             ("jp", ["jp"]),
             ("KR", ["kr"]),
             ("kr,jp,us", ["us", "jp", "kr"]),
+            ("tw", ["tw"]),
+            ("TW", ["tw"]),
+            ("tw,cn", ["cn", "tw"]),
             ("eu,apac", ["cn"]),
             (",,", ["cn"]),
             ("HK", ["hk"]),
@@ -253,7 +258,8 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         notifier.save_report_to_file.assert_not_called()
         notifier.send.assert_not_called()
 
-    def test_run_market_review_merges_both_regions_with_english_wrappers(self) -> None:
+    def test_run_market_review_merges_all_regions_with_english_wrappers(self) -> None:
+        # 顯式列出六個市場：both 已收斂為 cn,hk,us,jp,kr，不再涵蓋 tw。
         notifier = self._make_notifier()
         cn_analyzer = MagicMock()
         cn_analyzer.run_daily_review_with_snapshot.return_value = SimpleNamespace(
@@ -280,15 +286,29 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
             report="KR body",
             market_light_snapshot={"region": "kr", "trade_date": "2026-03-06", "score": 53},
         )
+        tw_analyzer = MagicMock()
+        tw_analyzer.run_daily_review_with_snapshot.return_value = SimpleNamespace(
+            report="TW body",
+            market_light_snapshot={"region": "tw", "trade_date": "2026-03-06", "score": 52},
+        )
 
         with patch.object(
             market_review_module,
             "get_config",
-            return_value=SimpleNamespace(report_language="en", market_review_region="both"),
+            return_value=SimpleNamespace(
+                report_language="en", market_review_region="cn,hk,us,jp,kr,tw"
+            ),
         ), patch.object(
             market_review_module,
             "MarketAnalyzer",
-            side_effect=[cn_analyzer, hk_analyzer, us_analyzer, jp_analyzer, kr_analyzer],
+            side_effect=[
+                cn_analyzer,
+                hk_analyzer,
+                us_analyzer,
+                jp_analyzer,
+                kr_analyzer,
+                tw_analyzer,
+            ],
         ), patch.object(market_review_module, "_persist_market_review_history") as persist_history:
             result = run_market_review(notifier, send_notification=True)
 
@@ -298,6 +318,7 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertIn("# US Market Recap\n\nUS body", result)
         self.assertIn("# Japan Market Recap\n\nJP body", result)
         self.assertIn("# Korea Market Recap\n\nKR body", result)
+        self.assertIn("# Taiwan Market Recap\n\nTW body", result)
         saved_content = notifier.save_report_to_file.call_args.args[0]
         self.assertTrue(saved_content.startswith("# 🎯 Market Review\n\n"))
         self.assertIn("# A-share Market Recap\n\nCN body", saved_content)
@@ -306,6 +327,7 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertIn("# US Market Recap\n\nUS body", saved_content)
         self.assertIn("# Japan Market Recap\n\nJP body", saved_content)
         self.assertIn("# Korea Market Recap\n\nKR body", saved_content)
+        self.assertIn("# Taiwan Market Recap\n\nTW body", saved_content)
         self.assertIn(
             "# A-share Market Recap\n\nCN body",
             persist_history.call_args.kwargs["markdown_report"],
@@ -319,6 +341,36 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         self.assertIn("# US Market Recap\n\nUS body", sent_content)
         self.assertIn("# Japan Market Recap\n\nJP body", sent_content)
         self.assertIn("# Korea Market Recap\n\nKR body", sent_content)
+        self.assertIn("# Taiwan Market Recap\n\nTW body", sent_content)
+
+    def test_run_market_review_comma_joined_subset_tw(self) -> None:
+        """台股（tw）单区域复盘应与 jp/kr 对等，且不混入其他市场。"""
+        notifier = self._make_notifier()
+        tw_analyzer = MagicMock()
+        tw_analyzer.run_daily_review_with_snapshot.return_value = SimpleNamespace(
+            report="TW body",
+            market_light_snapshot={"region": "tw", "trade_date": "2026-03-06", "score": 52},
+        )
+
+        with patch.object(
+            market_review_module,
+            "get_config",
+            return_value=SimpleNamespace(report_language="zh", market_review_region="cn"),
+        ), patch.object(
+            market_review_module,
+            "MarketAnalyzer",
+            side_effect=[tw_analyzer],
+        ) as analyzer_cls, patch.object(
+            market_review_module, "_persist_market_review_history"
+        ):
+            result = run_market_review(
+                notifier, send_notification=False, override_region="tw"
+            )
+
+        self.assertEqual(analyzer_cls.call_args.kwargs["region"], "tw")
+        self.assertIn("TW body", result)
+        self.assertNotIn("A股大盘复盘", result)
+        self.assertNotIn("日股大盘复盘", result)
 
     def test_run_market_review_comma_joined_subset_jp_kr(self) -> None:
         notifier = self._make_notifier()
