@@ -279,7 +279,9 @@ class TelegramSender:
             if not current_chunk:
                 return all_success
 
-            chunk_content = "\n---\n".join(current_chunk)
+            chunk_content = self._neutralize_unbalanced_markup(
+                "\n---\n".join(current_chunk)
+            )
             logger.info(f"发送 Telegram 消息块 {chunk_index}...")
             chunk_index += 1
             current_chunk = []
@@ -299,8 +301,20 @@ class TelegramSender:
             if len(section) <= limit:
                 return [section]
             chunks: list[str] = []
-            for start in range(0, len(section), limit):
-                chunks.append(section[start:start + limit])
+            remaining = section
+            while len(remaining) > limit:
+                window = remaining[:limit]
+                # Cut on the last line break inside the window so a *bold* pair
+                # opened and closed on one line is never severed. Falling back to
+                # a hard cut only matters for a single line longer than the limit,
+                # which the per-chunk guard below then neutralizes.
+                cut = window.rfind("\n")
+                if cut <= 0:
+                    cut = limit
+                chunks.append(remaining[:cut])
+                remaining = remaining[cut:].lstrip("\n")
+            if remaining:
+                chunks.append(remaining)
             return chunks
 
         for section in sections:
@@ -309,6 +323,7 @@ class TelegramSender:
                 if not _flush_chunk():
                     return False
                 for long_chunk in _split_long_section(section, max_length):
+                    long_chunk = self._neutralize_unbalanced_markup(long_chunk)
                     logger.info(f"发送 Telegram 消息块 {chunk_index}...")
                     chunk_index += 1
                     if not self._send_telegram_message(

@@ -2005,6 +2005,39 @@ class TestTelegramSender(unittest.TestCase):
         self.assertEqual("".join(payload_texts), sender._convert_to_telegram_markdown(content))
 
     @mock.patch("src.notification_sender.telegram_sender.requests.post")
+    def test_chunks_never_split_a_bold_pair(self, mock_post):
+        """A balanced payload must not become unbalanced once chunked.
+
+        The chunker used to slice at exactly max_length, which could sever a
+        *bold* pair. Each half then carried an odd number of asterisks, Telegram
+        rejected both, and the sender silently degraded the whole report to
+        unformatted plain text - the failure looked like a formatting quirk but
+        cost every message its formatting.
+        """
+        mock_post.return_value = _response(200, {"ok": True})
+        cfg = _config(telegram_bot_token="BOT", telegram_chat_id="CHAT")
+        sender = TelegramSender(cfg)
+        # Long enough to force several chunks, with a bold pair on every line so
+        # a naive fixed-offset cut is almost certain to land inside one.
+        content = "\n".join(f"**粗體段落 {i}** 內文內容內容內容" for i in range(400))
+
+        self.assertTrue(sender.send_to_telegram(content))
+
+        sent = [
+            call.kwargs["json"]["text"]
+            for call in mock_post.call_args_list
+            if "json" in call.kwargs and "text" in call.kwargs["json"]
+        ]
+        self.assertGreaterEqual(len(sent), 2)
+        for index, text in enumerate(sent, start=1):
+            self.assertEqual(
+                text.count("*") % 2,
+                0,
+                f"chunk {index} left an unclosed bold entity: {text.count('*')} asterisks",
+            )
+            self.assertLessEqual(len(text), 4096)
+
+    @mock.patch("src.notification_sender.telegram_sender.requests.post")
     def test_send_plain_text_fallback_handles_non_json_200(self, mock_post):
         markdown_error = _response(400)
         markdown_error.text = (
