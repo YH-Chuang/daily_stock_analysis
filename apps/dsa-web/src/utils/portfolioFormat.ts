@@ -7,7 +7,11 @@ import type {
   PortfolioPositionItem,
   PortfolioSide,
 } from '../types/portfolio';
+import type { UiTextKey, UiTextParams } from '../i18n/uiText';
 import { toDateInputValue } from './format';
+
+/** 与 useUiLanguage().t 同签名，便于组件直接透传 t。 */
+export type PortfolioTranslate = (key: UiTextKey, params?: UiTextParams) => string;
 
 export type FxRefreshFeedback = {
   tone: 'neutral' | 'success' | 'warning';
@@ -53,70 +57,96 @@ export function formatPositionMoney(value: number, row: PortfolioPositionItem): 
   return formatMoney(value, row.valuationCurrency);
 }
 
-export function getPositionPriceLabel(row: PortfolioPositionItem): string {
-  if (!hasPositionPrice(row)) return '缺价';
+export function getPositionPriceLabel(row: PortfolioPositionItem, t: PortfolioTranslate): string {
+  if (!hasPositionPrice(row)) return t('portfolio.priceMissing');
   if (row.priceSource === 'realtime_quote') {
-    return row.priceProvider ? `实时价 · ${row.priceProvider}` : '实时价';
+    return row.priceProvider
+      ? t('portfolio.priceRealtimeWithProvider', { provider: row.priceProvider })
+      : t('portfolio.priceRealtime');
   }
   if (row.priceSource === 'history_close') {
-    return row.priceStale && row.priceDate ? `收盘价 · ${row.priceDate}` : '收盘价';
+    return row.priceStale && row.priceDate
+      ? t('portfolio.priceCloseWithDate', { date: row.priceDate })
+      : t('portfolio.priceClose');
   }
-  return row.priceSource || '未知来源';
+  // priceSource 为后端返回的原始来源标识，保持原样不翻译。
+  return row.priceSource || t('portfolio.priceUnknownSource');
 }
 
-export function formatSideLabel(value: PortfolioSide): string {
-  return value === 'buy' ? '买入' : '卖出';
+export function formatSideLabel(value: PortfolioSide, t: PortfolioTranslate): string {
+  return value === 'buy' ? t('portfolio.buy') : t('portfolio.sell');
 }
 
-export function formatCashDirectionLabel(value: PortfolioCashDirection): string {
-  return value === 'in' ? '流入' : '流出';
+export function formatCashDirectionLabel(value: PortfolioCashDirection, t: PortfolioTranslate): string {
+  return value === 'in' ? t('portfolio.cashIn') : t('portfolio.cashOut');
 }
 
-export function formatCorporateActionLabel(value: PortfolioCorporateActionType): string {
-  return value === 'cash_dividend' ? '现金分红' : '拆并股调整';
+export function formatCorporateActionLabel(
+  value: PortfolioCorporateActionType,
+  t: PortfolioTranslate,
+): string {
+  return value === 'cash_dividend'
+    ? t('portfolio.cashDividend')
+    : t('portfolio.splitAdjustment');
 }
 
-export function formatBrokerLabel(value: string, displayName?: string): string {
-  if (displayName && displayName.trim()) return `${value}（${displayName.trim()}）`;
-  if (value === 'huatai') return 'huatai（华泰）';
-  if (value === 'citic') return 'citic（中信）';
-  if (value === 'cmb') return 'cmb（招商）';
+export function formatBrokerLabel(value: string, t: PortfolioTranslate, displayName?: string): string {
+  // displayName 来自后端账户配置，保持原样不翻译。
+  if (displayName && displayName.trim()) {
+    return t('portfolio.brokerWithName', { broker: value, name: displayName.trim() });
+  }
+  if (value === 'huatai') {
+    return t('portfolio.brokerWithName', { broker: value, name: t('portfolio.brokerHuatai') });
+  }
+  if (value === 'citic') {
+    return t('portfolio.brokerWithName', { broker: value, name: t('portfolio.brokerCitic') });
+  }
+  if (value === 'cmb') {
+    return t('portfolio.brokerWithName', { broker: value, name: t('portfolio.brokerCmb') });
+  }
   return value;
 }
 
-export function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse): FxRefreshFeedback {
+export function buildFxRefreshFeedback(
+  data: PortfolioFxRefreshResponse,
+  t: PortfolioTranslate,
+): FxRefreshFeedback {
   if (data.refreshEnabled === false) {
     return {
       tone: 'neutral',
-      text: '汇率在线刷新已被禁用。',
+      text: t('portfolio.fxRefreshDisabled'),
     };
   }
 
   if (data.pairCount === 0) {
     return {
       tone: 'neutral',
-      text: '当前范围无可刷新的汇率对。',
+      text: t('portfolio.fxRefreshNoPairs'),
     };
   }
 
   if (data.updatedCount > 0 && data.staleCount === 0 && data.errorCount === 0) {
     return {
       tone: 'success',
-      text: `汇率已刷新，共更新 ${data.updatedCount} 对。`,
+      text: t('portfolio.fxRefreshSuccess', { count: data.updatedCount }),
     };
   }
 
-  const summary = `更新 ${data.updatedCount} 对，仍过期 ${data.staleCount} 对，失败 ${data.errorCount} 对。`;
+  const summary = t('portfolio.fxRefreshSummary', {
+    updated: data.updatedCount,
+    stale: data.staleCount,
+    failed: data.errorCount,
+  });
   if (data.staleCount > 0) {
     return {
       tone: 'warning',
-      text: `已尝试刷新，但仍有部分货币对使用 stale/fallback 汇率。${summary}`,
+      text: t('portfolio.fxRefreshStale', { summary }),
     };
   }
 
   return {
     tone: 'warning',
-    text: `在线刷新未完全成功。${summary}`,
+    text: t('portfolio.fxRefreshPartial', { summary }),
   };
 }
 

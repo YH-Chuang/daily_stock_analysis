@@ -11,6 +11,12 @@ import {
   getPositionPriceLabel,
 } from '../portfolioFormat';
 import type { PortfolioPositionItem } from '../../types/portfolio';
+import { formatUiText, UI_TEXT, type UiTextKey } from '../../i18n/uiText';
+
+// 这些格式化函数改为接收 t，测试仍走真实的简体文案表，不用假字典 —— 否则断言
+// 只证明 mock 自己一致，产品文案改错也不会失败。
+const t = (key: UiTextKey, params?: Record<string, string | number>) =>
+  formatUiText(UI_TEXT.zh[key], params);
 
 const pricedPosition: PortfolioPositionItem = {
   symbol: 'HK00700',
@@ -40,17 +46,17 @@ describe('portfolioFormat', () => {
   it('formats position price fields based on price availability', () => {
     expect(formatPositionPrice(pricedPosition)).toBe('321.1234');
     expect(formatPositionMoney(123, pricedPosition)).toBe('CNY 123.00');
-    expect(getPositionPriceLabel(pricedPosition)).toBe('实时价 · longbridge');
+    expect(getPositionPriceLabel(pricedPosition, t)).toBe('实时价 · longbridge');
 
     const missingPosition = { ...pricedPosition, priceAvailable: false, priceSource: 'missing' };
     expect(formatPositionPrice(missingPosition)).toBe('--');
     expect(formatPositionMoney(123, missingPosition)).toBe('--');
-    expect(getPositionPriceLabel(missingPosition)).toBe('缺价');
+    expect(getPositionPriceLabel(missingPosition, t)).toBe('缺价');
   });
 
   it('formats broker labels and CSV result variants', () => {
-    expect(formatBrokerLabel('huatai')).toBe('huatai（华泰）');
-    expect(formatBrokerLabel('custom', ' 自定义 ')).toBe('custom（自定义）');
+    expect(formatBrokerLabel('huatai', t)).toBe('huatai（华泰）');
+    expect(formatBrokerLabel('custom', t, ' 自定义 ')).toBe('custom（自定义）');
     expect(getCsvParseVariant({ broker: 'huatai', recordCount: 1, skippedCount: 1, errorCount: 0, records: [], errors: [] })).toBe('warning');
     expect(getCsvCommitVariant({ accountId: 1, recordCount: 1, insertedCount: 1, duplicateCount: 0, failedCount: 0, dryRun: false, errors: [] }, false)).toBe('success');
   });
@@ -65,7 +71,7 @@ describe('portfolioFormat', () => {
       updatedCount: 0,
       staleCount: 0,
       errorCount: 0,
-    })).toMatchObject({ tone: 'neutral' });
+    }, t)).toMatchObject({ tone: 'neutral' });
 
     expect(buildFxRefreshFeedback({
       asOf: '2026-03-19',
@@ -76,6 +82,6 @@ describe('portfolioFormat', () => {
       updatedCount: 1,
       staleCount: 0,
       errorCount: 0,
-    })).toMatchObject({ tone: 'success' });
+    }, t)).toMatchObject({ tone: 'success' });
   });
 });
