@@ -29,7 +29,10 @@ from src.agent.runtime_facts import AgentRuntimeFacts
 from src.agent.stock_scope import StockScope, resolve_stock_scope
 from src.storage import get_db
 from src.agent.tools.registry import ToolRegistry
-from src.report_language import normalize_report_language
+from src.report_language import (
+    TRADITIONAL_CHINESE_OUTPUT_DIRECTIVE,
+    normalize_report_language,
+)
 from src.market_context import get_market_role, get_market_guidelines
 from src.market_phase_prompt import format_market_phase_prompt_section
 from src.market_structure_prompt import format_market_structure_prompt_section
@@ -485,6 +488,13 @@ def _build_language_section(report_language: str, *, chat_mode: bool = False) ->
 - Reply in English.
 - If you output JSON, keep the keys unchanged and write every human-readable value in English.
 """
+        if normalized == "zh-tw":
+            return f"""
+## 輸出語言
+
+- {TRADITIONAL_CHINESE_OUTPUT_DIRECTIVE}
+- 若輸出 JSON，鍵名保持不變，所有面向使用者的文字值使用繁體中文。
+"""
         return """
 ## 输出语言
 
@@ -500,6 +510,17 @@ def _build_language_section(report_language: str, *, chat_mode: bool = False) ->
 - `decision_type` must remain `buy|hold|sell`.
 - All human-readable JSON values must be written in English.
 - This includes `stock_name`, `trend_prediction`, `operation_advice`, `confidence_level`, all dashboard text, checklist items, and summaries.
+"""
+
+    if normalized == "zh-tw":
+        return f"""
+## 輸出語言
+
+- 所有 JSON 鍵名保持不變。
+- `decision_type` 必須保持為 `buy|hold|sell`。
+- {TRADITIONAL_CHINESE_OUTPUT_DIRECTIVE}
+- 這包含 `stock_name`、`trend_prediction`、`operation_advice`、`confidence_level`、
+  所有儀表板文字、檢查清單項目與摘要。
 """
 
     return """
@@ -866,6 +887,11 @@ class AgentExecutor:
                 parts.append("输出语言: English（所有 JSON 键名保持不变，所有面向用户的文本值使用英文）")
             elif report_language == "ko":
                 parts.append("출력 언어: 한국어（모든 JSON 키는 그대로 유지하고, 사용자 노출 텍스트 값은 한국어로 작성）")
+            elif report_language == "zh-tw":
+                parts.append(
+                    "輸出語言: 繁體中文（所有 JSON 鍵名保持不變）。"
+                    + TRADITIONAL_CHINESE_OUTPUT_DIRECTIVE
+                )
             else:
                 parts.append("输出语言: 中文（所有 JSON 键名保持不变，所有面向用户的文本值使用中文）")
 
