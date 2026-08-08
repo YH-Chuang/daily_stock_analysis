@@ -5,6 +5,7 @@ import {
 } from '../UiLanguageContext';
 import {
   getRuntimeInitialLanguage,
+  normalizeUiLanguage,
   persistUiLanguage,
   resolveInitialUiLanguage,
   UI_LANGUAGE_STORAGE_KEY,
@@ -102,7 +103,8 @@ describe('UiLanguageContext', () => {
     }
   });
 
-  it('switches UI language immediately and persists the explicit choice', () => {
+  it('cycles zh -> zh-tw -> en -> zh and persists each explicit choice', () => {
+    // 界面语言从二选一改为三选一，繁体（台湾）排在简体与英文之间。
     localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'zh');
 
     render(
@@ -111,13 +113,38 @@ describe('UiLanguageContext', () => {
       </UiLanguageProvider>
     );
 
-    const toggle = screen.getByRole('button', { name: '切换界面语言' });
     expect(screen.getByText('界面语言')).toBeInTheDocument();
 
-    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: '切换界面语言' }));
+    expect(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe('zh-tw');
+    expect(screen.getByRole('button', { name: '切換介面語言' })).toBeInTheDocument();
+    expect(screen.getByText('繁體中文')).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: '切換介面語言' }));
     expect(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe('en');
     expect(screen.getByRole('button', { name: 'Switch UI language' })).toBeInTheDocument();
     expect(screen.getByText('English')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch UI language' }));
+    expect(localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe('zh');
+    expect(screen.getByText('界面语言')).toBeInTheDocument();
+  });
+
+  it('resolves zh-TW / zh-Hant browser locales to Traditional Chinese', () => {
+    // 台湾用户第一次打开时不该落到简体界面。
+    expect(normalizeUiLanguage('zh-tw')).toBe('zh-tw');
+    expect(normalizeUiLanguage('zh-TW')).toBe('zh-tw');
+    expect(normalizeUiLanguage('zh-Hant')).toBe('zh-tw');
+    // 既有存档值行为不变。
+    expect(normalizeUiLanguage('zh')).toBe('zh');
+    expect(normalizeUiLanguage('en')).toBe('en');
+    expect(normalizeUiLanguage('fr')).toBeNull();
+
+    expect(
+      resolveInitialUiLanguage({ navigatorLike: { language: 'zh-TW', languages: ['zh-TW', 'en'] } })
+    ).toBe('zh-tw');
+    expect(
+      resolveInitialUiLanguage({ navigatorLike: { language: 'zh-CN', languages: ['zh-CN'] } })
+    ).toBe('zh');
   });
 });

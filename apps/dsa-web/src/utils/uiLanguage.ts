@@ -3,8 +3,12 @@ import type { UiLanguage } from '../i18n/uiText';
 export const UI_LANGUAGE_STORAGE_KEY = 'dsa.uiLanguage';
 
 export function normalizeUiLanguage(value?: string | null): UiLanguage | null {
-  if (value === 'zh' || value === 'en') {
+  if (value === 'zh' || value === 'zh-tw' || value === 'en') {
     return value;
+  }
+  // 兼容旧值与常见写法；已存的 'zh' / 'en' 行为不变。
+  if (value === 'zh-TW' || value === 'zh_tw' || value === 'zh-Hant') {
+    return 'zh-tw';
   }
   return null;
 }
@@ -53,6 +57,15 @@ function getBrowserUiLanguage(navigatorLike?: Pick<Navigator, 'language' | 'lang
 
   for (const candidate of languageCandidates) {
     const normalized = candidate.toLowerCase();
+    // 台湾／香港／澳门与 Hant 一律给繁体；其余 zh-* 维持简体，行为不变。
+    if (
+      normalized.startsWith('zh-tw') ||
+      normalized.startsWith('zh-hant') ||
+      normalized.startsWith('zh-hk') ||
+      normalized.startsWith('zh-mo')
+    ) {
+      return 'zh-tw';
+    }
     if (normalized.startsWith('zh')) {
       return 'zh';
     }
