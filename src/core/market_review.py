@@ -139,6 +139,18 @@ def _get_market_review_text(language: str) -> dict[str, str]:
             "tw_title": "# 대만 시황 리뷰",
             "separator": "> 다음 시장 시황 리뷰",
         }
+    if normalized == "zh-tw":
+        return {
+            "root_title": "# 🎯 大盤復盤",
+            "push_title": "🎯 大盤復盤",
+            "cn_title": "# A股大盤復盤",
+            "us_title": "# 美股大盤復盤",
+            "hk_title": "# 港股大盤復盤",
+            "jp_title": "# 日股大盤復盤",
+            "kr_title": "# 韓股大盤復盤",
+            "tw_title": "# 台股大盤復盤",
+            "separator": "> 以下為下一市場大盤復盤",
+        }
     return {
         "root_title": "# 🎯 大盘复盘",
         "push_title": "🎯 大盘复盘",
@@ -303,13 +315,10 @@ def run_market_review(
             }
         
         if review_report:
-            # 只跑台股單一市場時，外層標題也用繁體，避免整份報告簡繁混雜；
-            # 多市場合併或其他市場維持既有 root_title 不變。
+            # 標題字形由 report_language 決定（見 _get_market_review_text 的 zh-tw
+            # 分支），不再用 run_markets == ["tw"] 這個 region 代理判斷 —— 那個舊寫法
+            # 只改到 root_title，push_title 仍是簡體，造成存檔與推播標題不一致。
             root_title = review_text["root_title"]
-            if run_markets == ["tw"] and str(
-                getattr(runtime_config, "report_language", "zh")
-            ).lower().startswith("zh"):
-                root_title = "# 🎯 大盤復盤"
             market_review_payload = _build_combined_market_review_payload(
                 review_report=review_report,
                 payloads=market_review_payloads,

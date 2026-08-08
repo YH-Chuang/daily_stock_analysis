@@ -83,6 +83,28 @@ _RUNTIME_ENV_FILE_KEYS = set()
 _PUBLIC_BIND_HOSTS = frozenset({"0.0.0.0", "::", "[::]", "*"})
 
 
+def _market_review_push_heading(config: Any = None) -> str:
+    """Localized 大盤復盤 heading for the pushed market review.
+
+    Kept next to its call sites because two of them had no language branch at
+    all: they emitted Simplified even for en, directly above a report body in
+    another script.
+    """
+    from src.report_language import normalize_report_language
+
+    try:
+        if config is None:
+            config = get_config()
+        language = normalize_report_language(getattr(config, "report_language", "zh"))
+    except Exception:  # noqa: BLE001 - a heading must never break the run
+        language = "zh"
+    return {
+        "zh-tw": "大盤復盤",
+        "en": "Market Review",
+        "ko": "시황 리뷰",
+    }.get(language, "大盘复盘")
+
+
 def _get_active_env_path() -> Path:
     env_file = os.getenv("ENV_FILE")
     if env_file:
@@ -667,12 +689,16 @@ def _save_reused_market_review_report(
     body = str(market_report or "").strip()
     if not body:
         return
-    title = (
-        "# 🎯 Market Review"
-        if str(getattr(config, "report_language", "zh")).strip().lower() == "en"
-        else "# 🎯 大盘复盘"
-    )
-    if not any(body.startswith(item) for item in ("# 🎯 大盘复盘", "# 🎯 Market Review")):
+    title = f"# 🎯 {_market_review_push_heading(config)}"
+    if not any(
+        body.startswith(item)
+        for item in (
+            "# 🎯 大盘复盘",
+            "# 🎯 大盤復盤",
+            "# 🎯 Market Review",
+            "# 🎯 시황 리뷰",
+        )
+    ):
         body = f"{title}\n\n{body}"
     try:
         date_str = datetime.now().strftime('%Y%m%d')
@@ -936,7 +962,7 @@ def run_full_analysis(
                     and pipeline.notifier.is_available()
                 ):
                     if pipeline.notifier.send(
-                        f"# 📈 大盘复盘\n\n{market_report}",
+                        f"# 📈 {_market_review_push_heading()}\n\n{market_report}",
                         email_send_to_all=True,
                         route_type="report",
                     ):
@@ -994,7 +1020,7 @@ def run_full_analysis(
         if merge_notification and (results or market_report) and not args.no_notify:
             parts = []
             if market_report:
-                parts.append(f"# 📈 大盘复盘\n\n{market_report}")
+                parts.append(f"# 📈 {_market_review_push_heading()}\n\n{market_report}")
             if results:
                 dashboard_content = pipeline.notifier.generate_aggregate_report(
                     results,

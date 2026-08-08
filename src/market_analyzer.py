@@ -479,6 +479,15 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 "strong_down": "clear weakness",
                 "range": "range-bound trading",
             }
+        elif normalize_report_language(review_language) == "zh-tw":
+            # 盤整, not 震盪 - 震荡 is on the forbidden-terms list for zh-tw output.
+            mapping = {
+                "strong_up": "強勢上漲",
+                "mild_up": "小幅上漲",
+                "mild_down": "小幅下跌",
+                "strong_down": "明顯下跌",
+                "range": "盤整整理",
+            }
         else:
             mapping = {
                 "strong_up": "强势上涨",
@@ -1189,8 +1198,17 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 "|-------|------|----------|------|------|-----|-----------|-----------------|",
             ]
         else:
+            # The unit comes from _get_turnover_unit_label() rather than a literal 亿:
+            # _format_turnover_value divides by 1e9 for tw, so the old 亿 label was
+            # numerically wrong there, not merely Simplified.
+            header = choose_report_text(
+                self._get_review_language(),
+                zh=f"| 指数 | 最新 | 涨跌幅 | 开盘 | 最高 | 最低 | 振幅 | 成交额({self._get_turnover_unit_label()}) |",
+                zh_tw=f"| 指數 | 最新 | 漲跌幅 | 開盤 | 最高 | 最低 | 振幅 | 成交額({self._get_turnover_unit_label()}) |",
+                other=f"| Index | Last | Change % | Open | High | Low | Amplitude | Turnover ({self._get_turnover_unit_label()}) |",
+            )
             lines = [
-                "| 指数 | 最新 | 涨跌幅 | 开盘 | 最高 | 最低 | 振幅 | 成交额(亿) |",
+                header,
                 "|------|------|--------|------|------|------|------|-----------|",
             ]
         for idx in overview.indices:
@@ -1665,16 +1683,46 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             sections.append(f"### {numerals[section_number - 1]}、{title}\n{hint}")
             section_number += 1
 
+        def pick(zh: str, zh_tw: str) -> str:
+            return choose_report_text(review_language, zh=zh, zh_tw=zh_tw, other=zh)
+
         if self.profile.has_sector_rankings:
-            add_section("板块主线", "（仅分析已提供的行业板块与概念题材榜单，不扩展未提供的数据）")
+            add_section(
+                pick("板块主线", "類股主線"),
+                pick(
+                    "（仅分析已提供的行业板块与概念题材榜单，不扩展未提供的数据）",
+                    "（僅分析已提供的產業類股與概念題材榜單，不擴展未提供的資料）",
+                ),
+            )
         if self.profile.has_market_stats:
-            add_section("资金与情绪", "（仅解读已提供的成交额、涨跌停结构、市场宽度和风险偏好数据）")
+            add_section(
+                pick("资金与情绪", "資金與情緒"),
+                pick(
+                    "（仅解读已提供的成交额、涨跌停结构、市场宽度和风险偏好数据）",
+                    "（僅解讀已提供的成交額、漲跌停結構、市場寬度和風險偏好資料）",
+                ),
+            )
         add_section(
-            "消息催化",
-            "（结合近三日新闻和指数表现，提炼真正影响明日交易的催化或扰动；不要推断未提供的资金流、市场宽度或板块榜）",
+            pick("消息催化", "消息催化"),
+            pick(
+                "（结合近三日新闻和指数表现，提炼真正影响明日交易的催化或扰动；不要推断未提供的资金流、市场宽度或板块榜）",
+                "（結合近三日新聞和指數表現，提煉真正影響明日交易的催化或擾動；不要推斷未提供的資金流、市場寬度或類股榜）",
+            ),
         )
-        add_section("明日交易计划", "（给出进攻/均衡/防守结论、仓位区间、关注方向、回避方向和一个触发失效条件）")
-        add_section("风险提示", "（列出需要关注的风险点；最后补充“建议仅供参考，不构成投资建议”。）")
+        add_section(
+            pick("明日交易计划", "明日交易計劃"),
+            pick(
+                "（给出进攻/均衡/防守结论、仓位区间、关注方向、回避方向和一个触发失效条件）",
+                "（給出進攻/均衡/防守結論、部位區間、關注方向、迴避方向和一個觸發失效條件）",
+            ),
+        )
+        add_section(
+            pick("风险提示", "風險提示"),
+            pick(
+                "（列出需要关注的风险点；最后补充“建议仅供参考，不构成投资建议”。）",
+                "（列出需要關注的風險點；最後補充「建議僅供參考，不構成投資建議」。）",
+            ),
+        )
         return "\n\n".join(sections)
 
     def _build_review_prompt(self, overview: MarketOverview, news: List) -> str:
@@ -1755,11 +1803,23 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
 
             data_limit_lines = []
             if not self.profile.has_market_stats:
-                data_limit_lines.append("- 该市场暂无涨跌家数、涨跌停、成交额汇总、参与度或资金流信号。")
+                data_limit_lines.append(choose_report_text(
+                    review_language,
+                    zh="- 该市场暂无涨跌家数、涨跌停、成交额汇总、参与度或资金流信号。",
+                    zh_tw="- 本市場暫無漲跌家數、漲跌停、成交額彙總、參與度或資金流訊號。",
+                    other="- 该市场暂无涨跌家数、涨跌停、成交额汇总、参与度或资金流信号。",
+                ))
             if not self.profile.has_sector_rankings:
-                data_limit_lines.append("- 该市场暂无行业板块/概念题材涨跌榜。")
+                data_limit_lines.append(choose_report_text(
+                    review_language,
+                    zh="- 该市场暂无行业板块/概念题材涨跌榜。",
+                    zh_tw="- 本市場暫無產業類股／概念題材漲跌榜。",
+                    other="- 该市场暂无行业板块/概念题材涨跌榜。",
+                ))
             if data_limit_lines:
-                data_limits_block = "## 数据边界\n" + "\n".join(data_limit_lines)
+                data_limits_block = choose_report_text(
+                    review_language, zh="## 数据边界\n", zh_tw="## 資料邊界\n", other="## 数据边界\n",
+                ) + "\n".join(data_limit_lines)
 
         data_no_indices_hint = (
             "注意：由于行情数据获取失败，请主要根据【市场新闻】进行定性分析和总结，不要编造具体的指数点位。"
@@ -1785,31 +1845,77 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
                 else "2-3 sentences summarizing overall market tone, index moves, and available news context."
             )
         else:
-            indices_placeholder = indices_text if indices_text else "暂无指数数据（接口异常）"
-            news_placeholder = news_text if news_text else "暂无相关新闻"
+            indices_placeholder = indices_text if indices_text else choose_report_text(
+                review_language,
+                zh="暂无指数数据（接口异常）",
+                zh_tw="暫無指數資料（介面異常）",
+                other="暂无指数数据（接口异常）",
+            )
+            news_placeholder = news_text if news_text else choose_report_text(
+                review_language, zh="暂无相关新闻", zh_tw="暫無相關新聞", other="暂无相关新闻",
+            )
             data_boundary_requirement = (
-                "- 严格遵守数据边界：未提供涨跌家数、资金流、成交额汇总或板块榜时，不要编造或过度解读。\n"
+                choose_report_text(
+                    review_language,
+                    zh="- 严格遵守数据边界：未提供涨跌家数、资金流、成交额汇总或板块榜时，不要编造或过度解读。\n",
+                    zh_tw="- 嚴格遵守資料邊界：未提供漲跌家數、資金流、成交額彙總或類股榜時，不要編造或過度解讀。\n",
+                    other="- 严格遵守数据边界：未提供涨跌家数、资金流、成交额汇总或板块榜时，不要编造或过度解读。\n",
+                )
                 if data_limits_block
                 else ""
             )
             market_summary_hint = (
-                "2-3句话概括指数、涨跌家数、成交额和情绪温度，明确“强势/偏暖/震荡/偏弱”判断"
+                choose_report_text(
+                    review_language,
+                    zh="2-3句话概括指数、涨跌家数、成交额和情绪温度，明确“强势/偏暖/震荡/偏弱”判断",
+                    zh_tw="2-3句話概括指數、漲跌家數、成交額和情緒溫度，明確「強勢/偏暖/盤整/偏弱」判斷",
+                    other="2-3句话概括指数、涨跌家数、成交额和情绪温度，明确“强势/偏暖/震荡/偏弱”判断",
+                )
                 if self.profile.has_market_stats
-                else "2-3句话概括指数表现、新闻线索和整体风险状态，不要补写未提供的市场宽度或资金流数据"
+                else choose_report_text(
+                    review_language,
+                    zh="2-3句话概括指数表现、新闻线索和整体风险状态，不要补写未提供的市场宽度或资金流数据",
+                    zh_tw="2-3句話概括指數表現、新聞線索和整體風險狀態，不要補寫未提供的市場寬度或資金流資料",
+                    other="2-3句话概括指数表现、新闻线索和整体风险状态，不要补写未提供的市场宽度或资金流数据",
+                )
             )
 
         output_template_sections = self._build_output_template_sections(review_language)
-        zh_market_scope_name = self._get_market_scope_name("zh")
-        zh_report_title = f"{overview.date} 大盘复盘"
-        if self.region == "tw":
-            # 台股報告全程使用繁體中文，與台灣使用者的閱讀習慣一致。
-            zh_report_title = f"{overview.date} {zh_market_scope_name}大盤復盤"
-        elif self.region in ("jp", "kr"):
-            zh_report_title = f"{overview.date} {zh_market_scope_name}大盘复盘"
+        # Language now decides the script for every region, but the tw region keeps
+        # its own claim to Traditional: Taiwan reports were deliberately made
+        # Traditional regardless of the configured language, and
+        # test_market_strategy.py pins tw + zh -> 繁體 while jp/kr + zh stay 簡體.
+        # So this is an OR - zh-tw gains Traditional everywhere, tw loses nothing.
+        zh_market_scope_name = self._get_market_scope_name(review_language)
+        traditional_title = (
+            normalize_report_language(review_language) == "zh-tw" or self.region == "tw"
+        )
+        if self.region in ("tw", "jp", "kr"):
+            zh_report_title = (
+                f"{overview.date} {zh_market_scope_name}大盤復盤"
+                if traditional_title
+                else f"{overview.date} {zh_market_scope_name}大盘复盘"
+            )
+        else:
+            zh_report_title = (
+                f"{overview.date} 大盤復盤"
+                if traditional_title
+                else f"{overview.date} 大盘复盘"
+            )
         workflow_hint = (
-            "报告要像交易员盘后工作台：先给结论，再按数据表、主线、催化、计划展开"
+            choose_report_text(
+                review_language,
+                zh="报告要像交易员盘后工作台：先给结论，再按数据表、主线、催化、计划展开",
+                zh_tw="報告要像交易員盤後工作台：先給結論，再按資料表、主線、催化、計劃展開",
+                other="报告要像交易员盘后工作台：先给结论，再按数据表、主线、催化、计划展开",
+            )
             if self.profile.has_market_stats or self.profile.has_sector_rankings
-            else "报告要像交易员盘后工作台：先给结论，再按指数、新闻催化和计划展开"
+            else choose_report_text(
+                review_language,
+                zh="报告要像交易员盘后工作台：先给结论，再按指数、新闻催化和计划展开",
+                zh_tw="報告要像交易員盤後工作台：先給結論，再按指數、新聞催化和計劃展開",
+                other="报告要像交易员盘后工作台：先给结论，再按指数、新闻催化和计划展开",
+            )
         )
         # 台股報告以繁體中文（台灣用語）輸出，與台灣使用者的閱讀習慣一致；
         # cn/hk/jp/kr 維持既有簡體輸出，不受影響。
@@ -1889,26 +1995,95 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
 Output the report content directly, no extra commentary.
 """
 
-        # A 股场景使用中文提示语
-        return f"""你是一位专业的{self._get_market_scope_name('zh')}分析师，请根据以下数据生成一份结构化的{self._get_market_scope_name('zh')}大盘复盘报告。
-
-【重要】输出要求：
+        # 中文（簡/繁）提示語。整份鷹架跟著 review_language 走：模型會模仿它拿到的
+        # 骨架字形，僅靠一行「請用繁體」的指令壓不過整份簡體結構。
+        scope_name = self._get_market_scope_name(review_language)
+        role_line = choose_report_text(
+            review_language,
+            zh=f"你是一位专业的{scope_name}分析师，请根据以下数据生成一份结构化的{scope_name}大盘复盘报告。",
+            zh_tw=f"你是一位專業的{scope_name}分析師，請根據以下資料生成一份結構化的{scope_name}大盤復盤報告。",
+            other=f"你是一位专业的{scope_name}分析师，请根据以下数据生成一份结构化的{scope_name}大盘复盘报告。",
+        )
+        req_header = choose_report_text(
+            review_language,
+            zh="""【重要】输出要求：
 - 必须输出纯 Markdown 文本格式
 - 禁止输出 JSON 格式
 - 禁止输出代码块
-- emoji 仅在标题处少量使用（每个标题最多1个）
+- emoji 仅在标题处少量使用（每个标题最多1个）""",
+            zh_tw="""【重要】輸出要求：
+- 必須輸出純 Markdown 文本格式
+- 禁止輸出 JSON 格式
+- 禁止輸出程式碼區塊
+- emoji 僅在標題處少量使用（每個標題最多1個）""",
+            other="""【重要】输出要求：
+- 必须输出纯 Markdown 文本格式
+- 禁止输出 JSON 格式
+- 禁止输出代码块
+- emoji 仅在标题处少量使用（每个标题最多1个）""",
+        )
+        no_repeat_line = choose_report_text(
+            review_language,
+            zh="- 不要重复列出已由系统注入的表格数据；正文负责解释表格背后的含义",
+            zh_tw="- 不要重複列出已由系統注入的表格資料；正文負責解釋表格背後的含義",
+            other="- 不要重复列出已由系统注入的表格数据；正文负责解释表格背后的含义",
+        )
+        data_heading = choose_report_text(
+            review_language,
+            zh="# 今日市场数据\n\n## 日期",
+            zh_tw="# 今日市場資料\n\n## 日期",
+            other="# 今日市场数据\n\n## 日期",
+        )
+        indices_heading = choose_report_text(
+            review_language, zh="## 主要指数", zh_tw="## 主要指數", other="## 主要指数",
+        )
+        news_heading = choose_report_text(
+            review_language, zh="## 市场新闻", zh_tw="## 市場新聞", other="## 市场新闻",
+        )
+        tmpl_heading = choose_report_text(
+            review_language,
+            zh="# 输出格式模板（请严格按此格式输出）",
+            zh_tw="# 輸出格式模板（請嚴格按此格式輸出）",
+            other="# 输出格式模板（请严格按此格式输出）",
+        )
+        lede_hint = choose_report_text(
+            review_language,
+            zh="> 一句话给出今日市场状态、核心矛盾和明日优先观察方向。",
+            zh_tw="> 一句話給出今日市場狀態、核心矛盾和明日優先觀察方向。",
+            other="> 一句话给出今日市场状态、核心矛盾和明日优先观察方向。",
+        )
+        sec1_title = choose_report_text(
+            review_language, zh="### 一、盘面总览", zh_tw="### 一、盤面總覽", other="### 一、盘面总览",
+        )
+        sec2_title = choose_report_text(
+            review_language, zh="### 二、指数结构", zh_tw="### 二、指數結構", other="### 二、指数结构",
+        )
+        sec2_hint = choose_report_text(
+            review_language,
+            zh="说明谁在护盘、谁在拖累，以及关键支撑/压力",
+            zh_tw="說明誰在護盤、誰在拖累，以及關鍵支撐／壓力",
+            other="说明谁在护盘、谁在拖累，以及关键支撑/压力",
+        )
+        closing_line = choose_report_text(
+            review_language,
+            zh="请直接输出复盘报告内容，不要输出其他说明文字。",
+            zh_tw="請直接輸出復盤報告內容，不要輸出其他說明文字。",
+            other="请直接输出复盘报告内容，不要输出其他说明文字。",
+        )
+
+        return f"""{role_line}
+
+{req_header}
 - {workflow_hint}
-- 不要重复列出已由系统注入的表格数据；正文负责解释表格背后的含义{zh_script_requirement}{tw_scope_requirement_zh}
+{no_repeat_line}{zh_script_requirement}{tw_scope_requirement_zh}
 {data_boundary_requirement}
 
 ---
 
-# 今日市场数据
-
-## 日期
+{data_heading}
 {overview.date}
 
-## 主要指数
+{indices_heading}
 {indices_placeholder}
 
 {stats_block}
@@ -1919,7 +2094,7 @@ Output the report content directly, no extra commentary.
 
 {tw_supplement_block}
 
-## 市场新闻
+{news_heading}
 {news_placeholder}
 
 {data_no_indices_hint}
@@ -1928,23 +2103,23 @@ Output the report content directly, no extra commentary.
 
 ---
 
-# 输出格式模板（请严格按此格式输出）
+{tmpl_heading}
 
 ## {zh_report_title}
 
-> 一句话给出今日市场状态、核心矛盾和明日优先观察方向。
+{lede_hint}
 
-### 一、盘面总览
+{sec1_title}
 （{market_summary_hint}）
 
-### 二、指数结构
-（{self._get_index_hint()}，说明谁在护盘、谁在拖累，以及关键支撑/压力）
+{sec2_title}
+（{self._get_index_hint()}，{sec2_hint}）
 
 {output_template_sections}
 
 ---
 
-请直接输出复盘报告内容，不要输出其他说明文字。
+{closing_line}
 """
     
     def _generate_template_review(self, overview: MarketOverview, news: List) -> str:
@@ -2032,7 +2207,14 @@ Market conditions can change quickly. The data above is for reference only and d
 """
             return report
 
-        market_labels = {"cn": "A股", "us": "美股", "hk": "港股", "jp": "日股", "kr": "韩股", "tw": "台股"}
+        market_labels = {
+            "cn": "A股",
+            "us": "美股",
+            "hk": "港股",
+            "jp": "日股",
+            "kr": choose_report_text(template_language, zh="韩股", zh_tw="韓股", other="韩股"),
+            "tw": "台股",
+        }
         market_label = market_labels.get(self.region, "A股")
         dashboard_block = (
             self._build_stats_block(overview)
@@ -2042,57 +2224,134 @@ Market conditions can change quickly. The data above is for reference only and d
         indices_block = self._build_indices_block(overview)
         sector_block = self._build_sector_block(overview) if self.profile.has_sector_rankings else ""
         summary_focus = (
-            "指数承接、成交额变化和板块持续性"
+            choose_report_text(
+                template_language,
+                zh="指数承接、成交额变化和板块持续性",
+                zh_tw="指數承接、成交額變化和類股持續性",
+                other="指数承接、成交额变化和板块持续性",
+            )
             if self.profile.has_market_stats and self.profile.has_sector_rankings
-            else "指数承接、消息催化和整体风险状态"
+            else choose_report_text(
+                template_language,
+                zh="指数承接、消息催化和整体风险状态",
+                zh_tw="指數承接、消息催化和整體風險狀態",
+                other="指数承接、消息催化和整体风险状态",
+            )
         )
         market_summary_block = (
             dashboard_block
             if dashboard_block
             else (
-                "暂无市场宽度数据。"
+                choose_report_text(
+                    template_language,
+                    zh="暂无市场宽度数据。",
+                    zh_tw="暫無市場寬度資料。",
+                    other="暂无市场宽度数据。",
+                )
                 if self.profile.has_market_stats
-                else "- 当前以主要指数与可用新闻线索评估整体风险状态。"
+                else choose_report_text(
+                    template_language,
+                    zh="- 当前以主要指数与可用新闻线索评估整体风险状态。",
+                    zh_tw="- 目前以主要指數與可用新聞線索評估整體風險狀態。",
+                    other="- 当前以主要指数与可用新闻线索评估整体风险状态。",
+                )
             )
+        )
+        t_sector_title = choose_report_text(
+            template_language, zh="### 三、板块主线", zh_tw="### 三、類股主線", other="### 三、板块主线",
+        )
+        t_sector_empty = choose_report_text(
+            template_language,
+            zh="- 暂无板块涨跌榜数据。",
+            zh_tw="- 暫無類股漲跌榜資料。",
+            other="- 暂无板块涨跌榜数据。",
         )
         sector_section = (
             f"""
-### 三、板块主线
-{sector_block or "- 暂无板块涨跌榜数据。"}
+{t_sector_title}
+{sector_block or t_sector_empty}
 """
             if self.profile.has_sector_rankings
             else ""
         )
-        funds_section = (
-            """
+        t_funds = choose_report_text(
+            template_language,
+            zh="""
 ### 四、资金与情绪
 - 结合成交额和涨跌家数看，当前更适合等待确认，避免仅凭单一热点追高。
-"""
-            if self.profile.has_market_stats
-            else ""
+""",
+            zh_tw="""
+### 四、資金與情緒
+- 結合成交額和漲跌家數看，目前更適合等待確認，避免僅憑單一熱點追高。
+""",
+            other="""
+### 四、资金与情绪
+- 结合成交额和涨跌家数看，当前更适合等待确认，避免仅凭单一热点追高。
+""",
         )
-        return f"""## {overview.date} 大盘复盘
+        funds_section = t_funds if self.profile.has_market_stats else ""
+        t_title = choose_report_text(
+            template_language,
+            zh=f"## {overview.date} 大盘复盘",
+            zh_tw=f"## {overview.date} {self._get_market_scope_name(template_language)}大盤復盤",
+            other=f"## {overview.date} 大盘复盘",
+        )
+        t_lede = choose_report_text(
+            template_language,
+            zh=f"> 今日{market_label}市场整体呈现**{market_mood}**态势，优先观察{summary_focus}。",
+            zh_tw=f"> 今日{market_label}市場整體呈現**{market_mood}**態勢，優先觀察{summary_focus}。",
+            other=f"> 今日{market_label}市场整体呈现**{market_mood}**态势，优先观察{summary_focus}。",
+        )
+        t_sec1 = choose_report_text(
+            template_language, zh="### 一、盘面总览", zh_tw="### 一、盤面總覽", other="### 一、盘面总览",
+        )
+        t_sec2 = choose_report_text(
+            template_language, zh="### 二、指数结构", zh_tw="### 二、指數結構", other="### 二、指数结构",
+        )
+        t_idx_empty = choose_report_text(
+            template_language, zh="暂无指数数据。", zh_tw="暫無指數資料。", other="暂无指数数据。",
+        )
+        t_news = choose_report_text(
+            template_language,
+            zh="""### 五、消息催化
+- 暂无可用新闻时，应降低对题材持续性的确定性判断。""",
+            zh_tw="""### 五、消息催化
+- 暫無可用新聞時，應降低對題材持續性的確定性判斷。""",
+            other="""### 五、消息催化
+- 暂无可用新闻时，应降低对题材持续性的确定性判断。""",
+        )
+        t_risk = choose_report_text(
+            template_language,
+            zh="""### 七、风险提示
+- 市场有风险，投资需谨慎。以上数据仅供参考，不构成投资建议。""",
+            zh_tw="""### 七、風險提示
+- 市場有風險，投資需謹慎。以上資料僅供參考，不構成投資建議。""",
+            other="""### 七、风险提示
+- 市场有风险，投资需谨慎。以上数据仅供参考，不构成投资建议。""",
+        )
+        t_footer = choose_report_text(
+            template_language, zh="*复盘时间:", zh_tw="*復盤時間:", other="*复盘时间:",
+        )
+        return f"""{t_title}
 
-> 今日{market_label}市场整体呈现**{market_mood}**态势，优先观察{summary_focus}。
+{t_lede}
 
-### 一、盘面总览
+{t_sec1}
 {market_summary_block}
 
-### 二、指数结构
-{indices_block or indices_text or "暂无指数数据。"}
+{t_sec2}
+{indices_block or indices_text or t_idx_empty}
 {sector_section}
 {funds_section}
 
-### 五、消息催化
-- 暂无可用新闻时，应降低对题材持续性的确定性判断。
+{t_news}
 
 {self._get_strategy_markdown_block(template_language)}
 
-### 七、风险提示
-- 市场有风险，投资需谨慎。以上数据仅供参考，不构成投资建议。
+{t_risk}
 
 ---
-*复盘时间: {datetime.now().strftime('%H:%M')}*
+{t_footer} {datetime.now().strftime('%H:%M')}*
 """
     
     def _run_daily_review_parts(self) -> MarketLightReviewResult:
