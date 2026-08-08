@@ -9,6 +9,7 @@ import { ApiErrorAlert, Card, Badge, ConfirmDialog, EmptyState, InlineAlert } fr
 import { PortfolioSignalSummary } from '../components/decision-signals/DecisionSignalDisplay';
 import { useUiLanguage } from '../contexts/UiLanguageContext';
 import { formatUiText } from '../i18n/uiText';
+import type { UiLanguage } from '../i18n/uiText';
 import { PORTFOLIO_TEXT } from '../locales/featureText';
 import type { FxRefreshFeedback } from '../utils/portfolioFormat';
 import {
@@ -80,19 +81,22 @@ type PortfolioSignalLookupResult = {
   error: string | null;
 };
 
-type PortfolioPageLanguage = 'zh' | 'en';
+type PortfolioPageLanguage = UiLanguage;
 
 const PORTFOLIO_LIMITATION_LABELS: Record<string, Record<PortfolioPageLanguage, string>> = {
   realtime_quote_best_effort: {
     zh: '实时行情为尽力获取',
+    'zh-tw': '即時行情為盡力取得',
     en: 'Realtime quotes are best-effort',
   },
   fx_and_cost_basis_partial: {
     zh: '汇率与成本基础为部分口径',
+    'zh-tw': '匯率與成本基礎為部分口徑',
     en: 'FX and cost basis are partial',
   },
   sector_and_risk_metrics_limited: {
     zh: '行业与风险指标覆盖有限',
+    'zh-tw': '產業與風險指標涵蓋有限',
     en: 'Sector and risk metrics are limited',
   },
 };
