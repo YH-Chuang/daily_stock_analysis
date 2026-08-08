@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 - [新功能] Web 界面语言新增繁体中文（台湾），切换入口由中/英二选一改为「中 → 繁 → EN」三态循环，持久化 key `dsa.uiLanguage` 与既有 `zh`/`en` 存档值行为不变；浏览器语言为 `zh-TW`/`zh-Hant`/`zh-HK`/`zh-MO` 时首次进入即为繁体，其余 `zh-*` 仍为简体。覆盖 `uiText`（932 条）、`featureText`（28 张标签表）、系统配置分类、运行流程时间格式（`zh-TW` locale）与 `document.lang`。界面语言与 `REPORT_LANGUAGE` 仍是相互独立的两套设置
+- [修复] 问股（Agent）与 Agent 报告路径补上 `zh-tw` 输出语言指令。此前 `_build_language_section` 与 `DecisionAgent` 的系统提示只分辨 `en`/`ko`，`zh-tw` 落进通用中文分支且只写「默认使用中文回答」，从未要求繁体，因此 `REPORT_LANGUAGE=zh-tw` 下问台股仍得到简体回答。繁体指令收敛为 `src/report_language.TRADITIONAL_CHINESE_OUTPUT_DIRECTIVE` 单一真源，避免与个股/大盘路径的措辞继续漂移；`zh`/`en`/`ko` 行为不变
 - [修复] 操作建议的否定判定补齐繁体字形（`無`/`並非`/`並未`/`沒有` 与连接词 `建議`/`應`/`應當`/`暫`/`繼續`），此前 `REPORT_LANGUAGE=zh-tw` 下「不建議買進」「無買進訊號」会被判成 `decision_type=buy`，把不建议买入的结论呈现成买入信号；同时修正连接词按声明顺序剥离导致简体「不应当买入」同样误判为买入的问题
 - [修复] Telegram 报告的 Markdown 中和只移除真正落单的 `*`/`_`，并跳过代码块与链接 URL；此前只要全文该字符数为奇数就整篇删除，会把 `…/5892011_tsmc` 这类链接目标改写成 404 链接（发送仍返回成功、无日志），并连带丢掉全部已配对的 `*粗体*`
 - [改进] 大盘复盘的繁体输出改为跟随 `REPORT_LANGUAGE` 而非市场区域，与个股分析路径一致；`REPORT_LANGUAGE=zh-tw` 配任意区域都输出繁体，`REPORT_LANGUAGE=zh` 配 `MARKET_REVIEW_REGION=tw` 不再在简体提示里插入繁体要求。注入报告正文的盘面数据块、市场红绿灯标签/理由/温度词、成交量描述、市场名称与成交额单位、以及 cn 区域的输出模板同步跟随语言，繁体报告不再混入简体

@@ -1077,6 +1077,15 @@ def is_chinese_report_language(value: Optional[str]) -> bool:
     return normalize_report_language(value) in ("zh", "zh-tw")
 
 
+# 繁體輸出指令的單一真源。個股分析、大盤複盤與問股 Agent 各自都需要它；
+# 各處抄一份會漂移（本常數建立前，analyzer 與 market_analyzer 的措辭已經不一致）。
+TRADITIONAL_CHINESE_OUTPUT_DIRECTIVE = (
+    "全文必須使用繁體中文並採用台灣金融用語"
+    "（例如：籌碼、權值股、當沖、融資融券、伺服器、部位、本益比、"
+    "股價淨值比、類股、利多、利空、盤整、買進、賣出），不得輸出簡體字。"
+)
+
+
 def choose_report_text(language: Optional[str], *, zh: str, zh_tw: str, other: str) -> str:
     """Pick inline report copy by language family.
 
