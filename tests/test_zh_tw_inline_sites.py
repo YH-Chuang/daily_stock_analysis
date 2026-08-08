@@ -381,6 +381,103 @@ def test_format_analysis_context_pack_prompt_section_en_is_unchanged():
     assert "## Analysis Context Pack Summary" in en_section
 
 
+# ---------------------------------------------------------------------------
+# 注入报告正文的数据块 / 海报标签：这些不是提示词片段，字形错了就直接是
+# 用户可见的简繁混杂，而不是模型可以自行纠正的输入。
+# ---------------------------------------------------------------------------
+
+
+def _cn_overview() -> MarketOverview:
+    return MarketOverview(
+        date="2026-08-07",
+        indices=[],
+        up_count=2400,
+        down_count=2600,
+        flat_count=120,
+        limit_up_count=42,
+        limit_down_count=18,
+        total_amount=11000.0,
+    )
+
+
+def _analyzer(region: str, language: str) -> MarketAnalyzer:
+    with patch("src.market_analyzer.get_config", return_value=SimpleNamespace(report_language=language)):
+        return MarketAnalyzer(region=region)
+
+
+def test_injected_stats_block_is_traditional_for_zh_tw():
+    """_build_stats_block 的结果由 _inject_data_into_review 拼进已渲染的报告正文。
+
+    它此前只分辨 en 与非 en，于是 zh-tw 报告的「一、盤面總覽」底下会插进一整块
+    简体：盘面信号 / 震荡 / 控制仓位 / 上涨占比 / 两市成交额。
+    """
+    analyzer = _analyzer("cn", "zh-tw")
+    block = analyzer._build_stats_block(_cn_overview())
+
+    assert "盤面訊號" in block
+    assert "上漲/下跌/平盤" in block
+    assert "兩市成交額" in block
+    assert "| 指標 | 數值 | 觀察 |" in block
+    for term in _FORBIDDEN_MAINLAND_TERMS:
+        assert term not in block, f"zh-tw 盤面數據塊仍含簡體用語：{term}"
+
+
+def test_injected_stats_block_zh_and_en_are_unchanged():
+    zh_block = _analyzer("cn", "zh")._build_stats_block(_cn_overview())
+    assert "盘面信号" in zh_block
+    assert "| 指标 | 数值 | 观察 |" in zh_block
+    assert "两市成交额" in zh_block
+
+    en_block = _analyzer("cn", "en")._build_stats_block(_cn_overview())
+    assert "Market Signal" in en_block
+    assert "Breadth" in en_block
+
+
+def test_market_light_snapshot_is_traditional_for_zh_tw():
+    """market_light 会经 payload 外流到 API / Web / 通知与分享图，字形必须一致。"""
+    snapshot = _analyzer("cn", "zh-tw").build_market_light_snapshot(_cn_overview())
+
+    blob = "".join(
+        [str(snapshot["label"]), str(snapshot["guidance"]), str(snapshot["temperature_label"])]
+        + [str(reason) for reason in snapshot["reasons"]]
+    )
+    for term in _FORBIDDEN_MAINLAND_TERMS:
+        assert term not in blob, f"zh-tw market_light 仍含簡體用語：{term}"
+    assert "上漲家數占比" in blob
+
+    zh_snapshot = _analyzer("cn", "zh").build_market_light_snapshot(_cn_overview())
+    assert "上涨家数占比" in "".join(str(r) for r in zh_snapshot["reasons"])
+
+
+def test_market_review_script_directive_follows_report_language_not_region():
+    """繁体要求跟着 report_language 走，不跟区域走。
+
+    此前它绑在 region == "tw" 上：REPORT_LANGUAGE=zh-tw 配预设的 cn 区域，
+    个股报告是繁体、大盘复盘却是简体，两者还会被拼进同一次推送。
+    """
+    overview = _cn_overview()
+    directive = "全文必須使用繁體中文"
+
+    assert directive in _analyzer("cn", "zh-tw")._build_review_prompt(overview, [])
+    assert directive in _analyzer("tw", "zh-tw")._build_review_prompt(overview, [])
+    # 反过来：region=tw 配 REPORT_LANGUAGE=zh 不该在简体提示里插一行繁体要求。
+    assert directive not in _analyzer("tw", "zh")._build_review_prompt(overview, [])
+    assert directive not in _analyzer("cn", "zh")._build_review_prompt(overview, [])
+
+
+def test_poster_labels_cover_every_supported_poster_language():
+    """_poster_label 找不到键就原样回传，缺一个语言就是静默的简繁混杂。"""
+    from src.share_image import _POSTER_LABELS
+
+    reference = set(_POSTER_LABELS["en"])
+    for language, table in _POSTER_LABELS.items():
+        assert set(table) == reference, f"_POSTER_LABELS[{language!r}] 的键集合与 en 不一致"
+
+    assert _POSTER_LABELS["zh-tw"]["止损"] == "停損"
+    assert _POSTER_LABELS["zh-tw"]["理想买入"] == "理想買進"
+    assert _POSTER_LABELS["zh-tw"]["换手"] == "週轉"
+
+
 if __name__ == "__main__":
     import sys
 

@@ -61,6 +61,40 @@ const TEXT = {
       unknown: '未知',
     },
   },
+  'zh-tw': {
+    eyebrow: '市場位置',
+    title: '題材主線與個股位置',
+    marketLayer: '大盤題材層',
+    stockLayer: '個股位置層',
+    activeThemes: '活躍題材',
+    leadingConcepts: '領漲概念',
+    leadingIndustries: '領漲產業',
+    primaryTheme: '主關聯題材',
+    themePhase: '題材階段',
+    stockRole: '個股位置',
+    riskTags: '風險標籤',
+    dataQuality: '資料品質',
+    missingFields: '缺失證據',
+    empty: '暫無',
+    status: {
+      ok: '可用',
+      partial: '部分可用',
+      unknown: '未知',
+      not_supported: '不支援',
+    },
+    phase: {
+      warming: '升溫',
+      accelerating: '加速',
+      cooling: '降溫',
+      unknown: '未知',
+    },
+    role: {
+      leader: '龍頭',
+      follower: '跟隨',
+      edge: '邊緣關聯',
+      unknown: '未知',
+    },
+  },
   en: {
     eyebrow: 'MARKET POSITION',
     title: 'Themes and Stock Position',
@@ -142,6 +176,11 @@ const RISK_TAG_TEXT = {
     stock_theme_evidence_partial: 'Stock board did not match theme rankings',
     board_membership_missing: 'Stock board membership evidence is missing',
   },
+  'zh-tw': {
+    theme_data_partial: '題材主線資料不完整',
+    stock_theme_evidence_partial: '個股類股未匹配到市場題材榜單，個股位置按降級證據處理',
+    board_membership_missing: '缺少個股所屬類股證據，無法判斷題材位置',
+  },
   ko: {
     theme_data_partial: '테마 데이터가 불완전합니다',
     stock_theme_evidence_partial: '종목 보드가 테마 랭킹과 일치하지 않았습니다',
@@ -176,11 +215,7 @@ export const MarketStructureCard: React.FC<MarketStructureCardProps> = ({ contex
   }
 
   const reportLanguage = normalizeReportLanguage(language);
-  const text = reportLanguage === 'en'
-    ? TEXT.en
-    : reportLanguage === 'ko'
-      ? TEXT.ko
-      : TEXT.zh;
+  const text = TEXT[reportLanguage];
   const marketTheme = context.marketThemeContext;
   const stockPosition = context.stockMarketPosition;
   if (!marketTheme || !stockPosition) {

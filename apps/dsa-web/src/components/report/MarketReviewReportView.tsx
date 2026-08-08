@@ -326,6 +326,29 @@ const MARKET_REVIEW_TEXT: Record<ReportLanguage, {
     leading: 'Leading',
     lagging: 'Lagging',
   },
+  'zh-tw': {
+    reviewSummary: '復盤摘要',
+    noReviewSummary: '暫無摘要',
+    noSentimentScore: '暫無評分',
+    rotationAndFunds: '輪動與資金',
+    noRotationView: '暫無輪動觀點',
+    riskAndWatch: '風險與觀察',
+    noRiskWatch: '暫無觀察重點',
+    structuredMarketData: '結構化大盤資料',
+    noBreadthData: '暫無資料',
+    advancers: '上漲家數',
+    decliners: '下跌家數',
+    limitUpDown: '漲停/跌停',
+    turnover: '成交額',
+    index: '指數',
+    last: '最新',
+    change: '漲跌幅',
+    highLow: '高/低',
+    industryBoards: '產業類股',
+    conceptBoards: '概念類股',
+    leading: '領漲',
+    lagging: '領跌',
+  },
   ko: {
     reviewSummary: '리뷰 요약',
     noReviewSummary: '요약 없음',
@@ -371,7 +394,11 @@ export const MarketReviewReportView: React.FC<MarketReviewReportViewProps> = ({
 }) => {
   const normalizedReportLanguage = normalizeReportLanguage(reportLanguage);
   const text = getReportText(normalizedReportLanguage);
-  const runFlowText = UI_TEXT[normalizedReportLanguage === 'ko' ? 'en' : normalizedReportLanguage];
+  // UI_TEXT 只有 zh / en 两种界面语言：ko 沿用 en，zh-tw 收敛到 zh。
+  const runFlowText =
+    UI_TEXT[
+      normalizedReportLanguage === 'ko' || normalizedReportLanguage === 'en' ? 'en' : 'zh'
+    ];
   const marketReviewText = MARKET_REVIEW_TEXT[normalizedReportLanguage];
   const [loadedMarkdown, setLoadedMarkdown] = useState<LoadedMarkdown | null>(null);
   const [loadError, setLoadError] = useState<LoadError | null>(null);

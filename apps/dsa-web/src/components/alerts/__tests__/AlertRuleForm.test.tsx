@@ -234,7 +234,11 @@ describe('AlertRuleForm', () => {
     expect(screen.queryByText('组合回撤')).not.toBeInTheDocument();
   });
 
-  it('shows JP/KR options for market region in Chinese UI mode', () => {
+  it('offers exactly the market regions the market-light backend supports', () => {
+    // 告警的市场范围跟的是 market light（src/schemas/market_light.py 的
+    // MARKET_LIGHT_REGIONS = cn/hk/us），不是大盘复盘的区域集合。此前这个用例
+    // 断言 jp/kr 选项存在，但 market light 从未扩展到 jp/kr，更没有 tw ——
+    // 断言的是一个产品并不提供、也不应该提供的契约。
     render(<AlertRuleForm onSubmit={onSubmit} />);
 
     fireEvent.change(screen.getByLabelText('目标范围'), { target: { value: 'market' } });
@@ -242,8 +246,10 @@ describe('AlertRuleForm', () => {
     expect(screen.getByRole('option', { name: 'A 股（cn）' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '港股（hk）' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '美股（us）' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: '日股（jp）' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: '韩股（kr）' })).toBeInTheDocument();
+    // 大盘复盘支持 jp/kr/tw，market light 告警不支持；两者不得互相污染。
+    expect(screen.queryByRole('option', { name: /日股/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /韩股/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /台股/ })).not.toBeInTheDocument();
   });
 
   it('submits a market light status rule payload', async () => {

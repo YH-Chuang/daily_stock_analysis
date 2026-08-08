@@ -18,6 +18,16 @@ from src.formatters import format_telegram_markdown, strip_hidden_markdown_metad
 
 logger = logging.getLogger(__name__)
 
+# Telegram legacy Markdown parses no entities inside code spans, fenced blocks or
+# the ``(url)`` half of a link. Counting those regions is what let a link target
+# such as ``…/5892011_tsmc`` look like an unpaired italic marker.
+_MARKUP_PROTECTED_SPAN_PATTERN = re.compile(
+    r"```.*?```"
+    r"|`[^`\n]*`"
+    r"|\]\([^)]*\)",
+    re.DOTALL,
+)
+
 
 class TelegramSender:
 
@@ -392,14 +402,40 @@ class TelegramSender:
 
     @staticmethod
     def _neutralize_unbalanced_markup(text: str) -> str:
-        """Drop markup chars that appear an odd number of times.
+        """Drop only the markup chars that are actually left unpaired.
 
         Telegram rejects the entire message when an entity is left open, and the
-        sender then degrades to unformatted plain text. Losing one style is
-        better than losing all of them, so an unpaired * or _ is stripped
-        rather than sent.
+        sender then degrades to unformatted plain text, so a stray ``*``/``_``
+        still has to go. Deleting *every* occurrence whenever the document-wide
+        count happened to be odd - the previous behaviour - silently rewrote
+        link targets (``…/5892011_tsmc`` -> ``…/5892011tsmc``, a dead link that
+        still reads as correct) and threw away every correctly paired ``*bold*``
+        along with the stray one.
+
+        Telegram parses no entities inside code spans, fenced blocks or the
+        ``(url)`` half of a link, so those regions take part in neither the
+        pairing count nor the rewrite. Pairing runs left to right exactly as
+        Telegram does it, so an odd count leaves the final occurrence unmatched
+        and only that one is removed.
         """
+        if not text:
+            return text
+
+        protected = bytearray(len(text))
+        for match in _MARKUP_PROTECTED_SPAN_PATTERN.finditer(text):
+            start, end = match.span()
+            protected[start:end] = b"\x01" * (end - start)
+
+        drop: set[int] = set()
         for char in ("*", "_"):
-            if text.count(char) % 2:
-                text = text.replace(char, "")
-        return text
+            positions = [
+                index
+                for index, value in enumerate(text)
+                if value == char and not protected[index]
+            ]
+            if len(positions) % 2:
+                drop.add(positions[-1])
+
+        if not drop:
+            return text
+        return "".join(value for index, value in enumerate(text) if index not in drop)

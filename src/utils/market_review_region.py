@@ -7,6 +7,12 @@ from typing import Optional
 MARKET_REVIEW_REGION_ORDER = ("cn", "hk", "us", "jp", "kr", "tw")
 MARKET_REVIEW_REGION_SET = frozenset(MARKET_REVIEW_REGION_ORDER)
 MARKET_REVIEW_REGION_ALL = ",".join(MARKET_REVIEW_REGION_ORDER)
+
+# ``both`` 保持它加入 tw 之前的语义：cn/hk/us/jp/kr。把 tw 并进 ``both`` 会让每个
+# 既有 MARKET_REVIEW_REGION=both 的部署在没有改过配置的情况下多跑一次台股复盘
+# （多一次数据抓取、多一次 LLM 调用、推送里多一段台股）。tw 必须显式选择。
+MARKET_REVIEW_REGION_BOTH_ORDER = ("cn", "hk", "us", "jp", "kr")
+MARKET_REVIEW_REGION_BOTH = ",".join(MARKET_REVIEW_REGION_BOTH_ORDER)
 MARKET_REVIEW_REGION_VALID_INPUTS = (*MARKET_REVIEW_REGION_ORDER, "both")
 
 
@@ -14,7 +20,8 @@ def normalize_market_review_region_lenient(value: Optional[str]) -> Optional[str
     """Normalize persistent config input while preserving legacy filtering.
 
     ``None`` and an empty string retain the historical ``cn`` default. Comma
-    lists keep only supported markets, and ``both`` expands to every market.
+    lists keep only supported markets, and ``both`` expands to cn/hk/us/jp/kr
+    (its pre-``tw`` meaning - ``tw`` has to be requested by name).
     ``None`` is returned only when a non-defaultable value has no valid token.
     """
 
@@ -22,12 +29,12 @@ def normalize_market_review_region_lenient(value: Optional[str]) -> Optional[str
     if normalized in MARKET_REVIEW_REGION_SET:
         return normalized
     if normalized == "both":
-        return MARKET_REVIEW_REGION_ALL
+        return MARKET_REVIEW_REGION_BOTH
 
     if "," in normalized:
         requested = {token.strip() for token in normalized.split(",") if token.strip()}
         if "both" in requested:
-            return MARKET_REVIEW_REGION_ALL
+            return MARKET_REVIEW_REGION_BOTH
         regions = [region for region in MARKET_REVIEW_REGION_ORDER if region in requested]
         if regions:
             return ",".join(regions)
@@ -64,7 +71,7 @@ def normalize_market_review_region_strict(value: str) -> str:
     if "both" in tokens:
         if len(tokens) != 1:
             raise ValueError("region 中 both 必须单独使用，不能与其他市场混合")
-        return MARKET_REVIEW_REGION_ALL
+        return MARKET_REVIEW_REGION_BOTH
 
     requested = set(tokens)
     return ",".join(region for region in MARKET_REVIEW_REGION_ORDER if region in requested)

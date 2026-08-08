@@ -29,7 +29,7 @@
   - KOSPI：`^KS11`（<https://finance.yahoo.com/quote/%5EKS11/>）
   - KOSDAQ：`^KQ11`（<https://finance.yahoo.com/quote/%5EKQ11/>）
   - 依赖版本：`requirements.txt` 中 `yfinance>=0.2.0`，回归覆盖路径见 `tests/test_yfinance_jp_kr_indices.py` 与 `tests/test_yfinance_hk_indices.py`。
-- 兼容性与回退：`MARKET_REVIEW_REGION` 会保留合法逗号子集（如 `cn,us`）并保持 `both` 全量行为，非法值或空值回退到 `cn`，不会清空或迁移已保存配置。
+- 兼容性与回退：`MARKET_REVIEW_REGION` 会保留合法逗号子集（如 `cn,us`），`both` 展开为 `cn,hk,us,jp,kr`（不含 `tw`），非法值或空值回退到 `cn`，不会清空或迁移已保存配置。
 - 运行时边界：JP/KR 指数按 market_review 的 fail-open 约定逐项抓取；单项失败不会阻断其余指数与其他市场；当两个市场均无可用主指数行情时返回本地可见 `None/空`，主流程继续可按其余市场输出或直接降级。
 - 兼容性验证依据：行情/基本面上下文在 `data_provider/base.py` 与 `realtime_types.py` 中按现有 `getattr`/可选字段约定向下游透传，不强制读写新增字段；无配置迁移脚本，未观察到 provider/model/base URL fallback 路径变更。
 - 回退方式：若新增元数据字段在某端产生兼容问题，可先忽略这些字段并按既有市场判定+行情展示链路运行；必要时回滚本次提交或通过移除 `jp/kr` `MarketSymbol` 及路由扩展恢复旧行为。
@@ -45,7 +45,7 @@
 
 ## 日本/韩国大盘复盘 v1（Issue #1815 Phase 2）
 
-大盘复盘 `MARKET_REVIEW_REGION` 新增 `jp` 与 `kr`，并纳入 `both` 的多市场顺序：`cn,hk,us,jp,kr`（`tw` 接入后 `both` 顺序为 `cn,hk,us,jp,kr,tw`，见下文「台湾大盘复盘 v1」）。
+大盘复盘 `MARKET_REVIEW_REGION` 新增 `jp` 与 `kr`，并纳入 `both` 的多市场顺序：`cn,hk,us,jp,kr`（`tw` 不纳入 `both`，需显式配置，见下文「台湾大盘复盘 v1」）。
 
 支持范围：
 
@@ -127,7 +127,7 @@ PY
 
 ## 台湾大盘复盘 v1
 
-大盘复盘 `MARKET_REVIEW_REGION` 新增 `tw`，并纳入 `both` 的多市场顺序：`cn,hk,us,jp,kr,tw`。
+大盘复盘 `MARKET_REVIEW_REGION` 新增 `tw`。**`tw` 不纳入 `both`**：`both` 保持 `cn,hk,us,jp,kr`，既有 `MARKET_REVIEW_REGION=both` 的部署不会在未改配置的情况下多跑一次台股复盘；要跑台股请显式写出 `tw`（如 `tw`、`cn,tw`、`cn,hk,us,jp,kr,tw`）。
 
 支持范围：
 

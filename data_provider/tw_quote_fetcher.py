@@ -160,13 +160,35 @@ def _parse_date_arg(value: Any) -> Optional[datetime]:
     return None
 
 
+_DEFAULT_QUOTE_PRIORITY = 6
+
+
+def _resolve_priority(raw: Optional[str], default: int = _DEFAULT_QUOTE_PRIORITY) -> int:
+    """把 ``TW_QUOTE_PRIORITY`` 解析成整數，非法值退回預設而不是讓匯入炸掉。
+
+    這個值在 class body 求值，也就是在 import 期間。裸 ``int()`` 遇到空字串或打錯
+    的值會拋 ``ValueError``，而它是從 ``DataFetcherManager`` 匯入的——等於一個
+    可選的台股備援資料源的設定筆誤，會讓整條分析流程在啟動時就掛掉。
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return default
+    try:
+        return int(text)
+    except ValueError:
+        logger.warning(
+            "TW_QUOTE_PRIORITY=%r 不是合法整數，退回預設優先級 %s", raw, default
+        )
+        return default
+
+
 class TwQuoteFetcher(BaseFetcher):
     """台股（``.TW`` 上市 / ``.TWO`` 上櫃）日線行情，走 TWSE / TPEx 官方 RWD 端點。"""
 
     name = "TwQuoteFetcher"
     # 6 = 排在既有所有資料源之後（Yfinance 為 4，Longbridge/Tencent 為 5），
     # 確保只有在 Yahoo 也失敗時才啟用本資料源。
-    priority = int(os.getenv("TW_QUOTE_PRIORITY", "6"))
+    priority = _resolve_priority(os.getenv("TW_QUOTE_PRIORITY"))
 
     def __init__(
         self,

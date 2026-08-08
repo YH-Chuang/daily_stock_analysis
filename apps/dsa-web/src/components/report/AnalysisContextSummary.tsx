@@ -52,6 +52,14 @@ const BLOCK_LABELS: Record<ReportLanguage, Record<string, string>> = {
     fundamentals: 'fundamentals',
     chip: 'chip',
   },
+  'zh-tw': {
+    quote: '行情',
+    daily_bars: '日線',
+    technical: '技術',
+    news: '新聞',
+    fundamentals: '基本面',
+    chip: '籌碼',
+  },
   ko: {
     quote: '시세',
     daily_bars: '일봉',
@@ -127,6 +135,38 @@ const TEXT = {
       fetch_failed: 'Fetch failed',
     },
   },
+  'zh-tw': {
+    eyebrow: '資料脈絡',
+    title: '輸入資料塊',
+    counts: '狀態計數',
+    source: '來源',
+    sourceUnavailable: '未記錄輸入來源',
+    warnings: '告警',
+    missingReasons: '說明',
+    diagnosticCode: '診斷碼',
+    inputScope: '本次分析輸入',
+    evidenceScope: '僅代表進入本次 LLM 的輸入，不等同於資料來源執行成功',
+    qualityScore: '品質分',
+    limitations: '資料限制',
+    newsResultCount: '新聞結果數',
+    triggerSource: '觸發來源',
+    qualityLevel: {
+      good: '良好',
+      usable: '可用',
+      limited: '受限',
+      poor: '較差',
+    },
+    status: {
+      available: '可用',
+      missing: '缺失',
+      not_supported: '不支援',
+      fallback: '降級',
+      stale: '過期',
+      estimated: '估算',
+      partial: '部分可用',
+      fetch_failed: '抓取失敗',
+    },
+  },
   ko: {
     eyebrow: '데이터 컨텍스트',
     title: '입력 데이터 블록',
@@ -192,6 +232,21 @@ const MISSING_REASON_LABELS: Record<ReportLanguage, Record<string, string>> = {
     today_missing: 'Today\'s data was not included, so intraday conclusions may be limited; cross-check real-time quotes and rerun',
     yesterday_missing: 'Yesterday\'s data was not included, so daily comparisons may be incomplete; wait for the source to update and rerun',
   },
+  'zh-tw': {
+    daily_bars_missing: '日線資料未進入本次分析，技術指標可能不完整；請檢查日線資料來源、網路或流量限制後重新分析',
+    news_context_missing: '新聞未進入本次 LLM 分析，結論未使用新聞脈絡；報告頁的相關資訊由獨立介面補充，顯示與否不代表已進入本次分析。請檢查搜尋設定、網路或流量限制後重新分析',
+    realtime_quote_missing: '即時行情未進入本次分析，目前價格相關結論可能受限；請檢查行情資料來源、網路或流量限制後重新分析',
+    trend_result_missing: '技術分析結果未進入本次分析，技術面判斷可能不完整；請檢查日線完整性後重新分析',
+    fundamental_context_missing: '基本面未進入本次分析，結論未使用基本面資料；請檢查基本面資料來源、網路或流量限制後重新分析',
+    fundamental_pipeline_failed: '基本面抓取失敗，本次分析未使用基本面資料；請檢查資料來源設定、網路或流量限制後重新分析',
+    fundamentals_not_supported: '目前市場或標的不支援基本面資料，本次分析未使用；請結合其他指標判斷',
+    fundamental_coverage_missing: '基本面涵蓋資料未進入本次分析，結論可能缺少部分財務資訊；請檢查資料來源涵蓋範圍後重新分析',
+    fundamental_source_chain_missing: '未記錄基本面來源鏈中繼資料；基本面是否進入本次分析以目前狀態為準，請結合來源和告警複核資料出處',
+    chip_distribution_missing: '籌碼資料未進入本次分析，結論未使用籌碼分布；請確認目前市場或標的的資料支援情況',
+    chip_not_supported: '目前市場或標的不支援籌碼資料，本次分析未使用該指標；請結合其他指標判斷',
+    today_missing: '今日資料未進入本次分析，盤中判斷可能受限；請結合即時行情複核後重新分析',
+    yesterday_missing: '昨日資料未進入本次分析，日線比較可能不完整；請等待資料來源更新後重新分析',
+  },
   ko: {
     daily_bars_missing: '일봉이 포함되지 않아 기술 지표가 불완전할 수 있습니다. 일봉 소스, 네트워크 또는 제한을 확인한 후 다시 분석하세요',
     news_context_missing: '뉴스가 이번 LLM 분석에 포함되지 않아 결론에 뉴스 맥락이 반영되지 않았습니다. 보고서 페이지의 관련 뉴스는 별도 API에서 불러오며, 표시 여부가 이번 분석에 사용되었음을 의미하지는 않습니다. 검색 설정, 네트워크 또는 제한을 확인한 후 다시 분석하세요',
@@ -211,6 +266,7 @@ const MISSING_REASON_LABELS: Record<ReportLanguage, Record<string, string>> = {
 
 const UNKNOWN_REASON_DETAILS: Record<ReportLanguage, string> = {
   zh: '未记录明确原因；请结合状态、来源和告警排查',
+  'zh-tw': '未記錄明確原因；請結合狀態、來源和告警排查',
   en: 'No specific reason was recorded; review the status, source, and warnings',
   ko: '명확한 원인이 기록되지 않았습니다. 상태, 출처 및 경고를 함께 확인하세요',
 };
@@ -236,6 +292,15 @@ const STATUS_FALLBACK_GUIDANCE: Record<
     stale: 'This analysis used data that may not be current; check the timestamp and rerun if needed',
     estimated: 'This analysis used estimated data; cross-check the result against source data',
     partial: 'Only part of the data was included, so related conclusions may be incomplete; check warnings and the data source and rerun',
+  },
+  'zh-tw': {
+    missing: '資料未進入本次分析，相關結論可能不完整；請檢查資料來源、設定或網路後重新分析',
+    fetch_failed: '資料抓取失敗，本次分析未使用該資料；請檢查資料來源、網路或流量限制後重新分析',
+    not_supported: '目前市場或標的不支援該資料，本次分析未使用；請結合其他指標判斷',
+    fallback: '本次分析使用了備援資料路徑；請結合來源和告警複核結果',
+    stale: '本次分析使用的不是最新資料；請檢查更新時間並視需要重新分析',
+    estimated: '本次分析使用了估算資料；請結合原始資料複核結果',
+    partial: '僅部分資料進入本次分析，相關結論可能不完整；請檢查告警和資料來源後重新分析',
   },
   ko: {
     missing: '데이터가 포함되지 않아 관련 결론이 불완전할 수 있습니다. 데이터 소스, 설정 또는 네트워크를 확인한 후 다시 분석하세요',
@@ -290,7 +355,10 @@ const formatLimitation = (
 
   const label = BLOCK_LABELS[language][key] || key;
   const statusLabel = (text.status as Record<string, string>)[status] || status;
-  return language === 'zh' ? `${label}：${statusLabel}` : `${label}: ${statusLabel}`;
+  // 中文（含繁體）用全形冒號，en/ko 用半形。
+  return language === 'zh' || language === 'zh-tw'
+    ? `${label}：${statusLabel}`
+    : `${label}: ${statusLabel}`;
 };
 
 const formatMissingReason = (

@@ -990,13 +990,19 @@ _REPORT_LABELS: Dict[str, Dict[str, str]] = {
     },
 }
 
+# 否定词同时收录简繁两种字形：report_language=zh-tw 时模型输出的是「不建議買進」
+# 「無買進訊號」，只列简体字形会让否定判定整个失效，把不建议买入呈现成买入信号。
 _DECISION_INTENT_NEGATIONS = (
     "不",
     "并非",
+    "並非",
     "并未",
+    "並未",
     "未",
     "没有",
+    "沒有",
     "无",
+    "無",
     "不是",
     "no ",
     "not ",
@@ -1006,18 +1012,32 @@ _DECISION_INTENT_NEGATIONS = (
 _DECISION_INTENT_NEGATION_SCOPE_BREAK_CHARS = "，,。；;:!?！？"
 _DECISION_INTENT_NEGATION_CONNECTORS = (
     "建议",
+    "建議",
     "应",
+    "應",
     "应当",
+    "應當",
     "宜",
     "先",
     "再",
     "暂",
+    "暫",
     "暂时",
+    "暫時",
     "可",
     "可以",
     "需要",
     "需",
     "继续",
+    "繼續",
+    "出现",
+    "出現",
+)
+
+# 必须由长到短比对：按声明顺序会让「应」先于「应当」被剥离，在后面留下孤字「当」，
+# 使「不应当买入」/「不應當買進」逃出否定范围被判成买入。
+_DECISION_INTENT_NEGATION_CONNECTORS_BY_LENGTH = tuple(
+    sorted(_DECISION_INTENT_NEGATION_CONNECTORS, key=len, reverse=True)
 )
 
 
@@ -1027,7 +1047,7 @@ def _strip_decision_negation_connectors(text: str) -> str:
     changed = True
     while changed:
         changed = False
-        for connector in _DECISION_INTENT_NEGATION_CONNECTORS:
+        for connector in _DECISION_INTENT_NEGATION_CONNECTORS_BY_LENGTH:
             if suffix.startswith(connector):
                 suffix = suffix[len(connector):].strip()
                 changed = True

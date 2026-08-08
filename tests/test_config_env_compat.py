@@ -117,7 +117,8 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         self.assertEqual(config.market_review_region, "cn,us,kr")
 
     def test_market_review_region_keeps_legacy_mixed_both_and_empty_token_compatibility(self) -> None:
-        self.assertEqual(Config._parse_market_review_region("both,us"), "cn,hk,us,jp,kr,tw")
+        # both 不含 tw：tw 併入 both 會讓既有 both 部署無聲多跑一次台股複盤。
+        self.assertEqual(Config._parse_market_review_region("both,us"), "cn,hk,us,jp,kr")
         self.assertEqual(Config._parse_market_review_region("cn,,us"), "cn,us")
 
     @patch("src.config.setup_env")
@@ -956,7 +957,7 @@ class ConfigEnvCompatibilityTestCase(unittest.TestCase):
         )
         self.assertEqual(
             Config._parse_market_review_region("both"),
-            "cn,hk,us,jp,kr,tw",
+            "cn,hk,us,jp,kr",
         )
 
     def test_parse_market_review_region_accepts_tw_values_and_comma_lists(self) -> None:

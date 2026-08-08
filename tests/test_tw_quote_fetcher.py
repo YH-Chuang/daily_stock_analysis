@@ -19,6 +19,7 @@ import pytest
 from data_provider.base import STANDARD_COLUMNS, DataFetcherManager
 from data_provider.tw_quote_fetcher import (
     TwQuoteFetcher,
+    _resolve_priority,
     _to_float,
     minguo_date_to_iso,
 )
@@ -507,3 +508,21 @@ def test_tw_daily_chain_falls_back_to_tw_quote_only_after_yfinance_fails():
     assert source == "TwQuoteFetcher"
     assert yfinance.calls == ["6488.TWO"]   # Yahoo 先試，失敗後才輪到台股源
     assert tw_quote.calls == ["6488.TWO"]
+
+
+def test_priority_parsing_never_breaks_import_on_a_bad_env_value():
+    """TW_QUOTE_PRIORITY 在 class body 求值，也就是在 import 期間。
+
+    裸 ``int()`` 遇到空字串或打錯的值會拋 ValueError，而本模組是由
+    DataFetcherManager 匯入的 —— 一個可選台股備援資料源的設定筆誤，
+    就會讓整條分析流程在啟動時掛掉，違反「單一資料源失敗不應拖垮流程」。
+    """
+    assert _resolve_priority(None) == 6
+    assert _resolve_priority("") == 6
+    assert _resolve_priority("   ") == 6
+    assert _resolve_priority("oops") == 6
+    assert _resolve_priority("6.5") == 6
+    # 合法值仍要生效，否則四份文件宣告的可覆寫就是假的。
+    assert _resolve_priority("0") == 0
+    assert _resolve_priority("9") == 9
+    assert _resolve_priority(" 3 ") == 3

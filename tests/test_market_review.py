@@ -60,7 +60,9 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         cases = [
             (None, ["cn"]),
             ("", ["cn"]),
-            ("both", ["cn", "hk", "us", "jp", "kr", "tw"]),
+            # both 不含 tw：tw 併入 both 會讓既有 both 部署無聲多跑一次台股複盤。
+            ("both", ["cn", "hk", "us", "jp", "kr"]),
+            ("cn,hk,us,jp,kr,tw", ["cn", "hk", "us", "jp", "kr", "tw"]),
             (" CN,US,cn ", ["cn", "us"]),
             ("us,cn,us", ["cn", "us"]),
             ("jp", ["jp"]),
@@ -256,7 +258,8 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         notifier.save_report_to_file.assert_not_called()
         notifier.send.assert_not_called()
 
-    def test_run_market_review_merges_both_regions_with_english_wrappers(self) -> None:
+    def test_run_market_review_merges_all_regions_with_english_wrappers(self) -> None:
+        # 顯式列出六個市場：both 已收斂為 cn,hk,us,jp,kr，不再涵蓋 tw。
         notifier = self._make_notifier()
         cn_analyzer = MagicMock()
         cn_analyzer.run_daily_review_with_snapshot.return_value = SimpleNamespace(
@@ -292,7 +295,9 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
         with patch.object(
             market_review_module,
             "get_config",
-            return_value=SimpleNamespace(report_language="en", market_review_region="both"),
+            return_value=SimpleNamespace(
+                report_language="en", market_review_region="cn,hk,us,jp,kr,tw"
+            ),
         ), patch.object(
             market_review_module,
             "MarketAnalyzer",

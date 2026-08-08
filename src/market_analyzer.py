@@ -174,34 +174,57 @@ class MarketAnalyzer:
         return self._get_review_language()
 
     def _get_market_scope_name(self, review_language: str | None = None) -> str:
+        # 区域决定说的是哪个市场，report_language 决定用哪种字形；两者独立。
+        # 只按区域给字形会让 zh-tw 报告出现「美股市场大盤復盤」这种半简半繁的标题。
         review_language = review_language or self._get_review_language()
         if self.region == "us":
-            return "US market" if review_language == "en" else "美股市场"
+            return choose_report_text(
+                review_language, zh="美股市场", zh_tw="美股市場", other="US market"
+            )
         if self.region == "hk":
-            return "Hong Kong market" if review_language == "en" else "港股市场"
+            return choose_report_text(
+                review_language, zh="港股市场", zh_tw="港股市場", other="Hong Kong market"
+            )
         if self.region == "jp":
-            return "Japan market" if review_language == "en" else "日本市场"
+            return choose_report_text(
+                review_language, zh="日本市场", zh_tw="日本市場", other="Japan market"
+            )
         if self.region == "kr":
-            return "Korea market" if review_language == "en" else "韩国市场"
+            return choose_report_text(
+                review_language, zh="韩国市场", zh_tw="韓國市場", other="Korea market"
+            )
         if self.region == "tw":
-            return "Taiwan market" if review_language == "en" else "台灣市場"
-        if review_language == "en":
-            return "A-share market"
-        return "A股市场"
+            return choose_report_text(
+                review_language, zh="台灣市場", zh_tw="台灣市場", other="Taiwan market"
+            )
+        return choose_report_text(
+            review_language, zh="A股市场", zh_tw="A股市場", other="A-share market"
+        )
 
     def _get_turnover_unit_label(self) -> str:
         """Return the turnover unit label for the current market/language."""
+        review_language = self._get_review_language()
         if self.region == "us":
-            return "USD bn" if self._get_review_language() == "en" else "十亿美元"
+            return choose_report_text(
+                review_language, zh="十亿美元", zh_tw="十億美元", other="USD bn"
+            )
         if self.region == "hk":
-            return "HKD bn" if self._get_review_language() == "en" else "十亿港元"
+            return choose_report_text(
+                review_language, zh="十亿港元", zh_tw="十億港元", other="HKD bn"
+            )
         if self.region == "jp":
-            return "JPY bn" if self._get_review_language() == "en" else "十亿日元"
+            return choose_report_text(
+                review_language, zh="十亿日元", zh_tw="十億日圓", other="JPY bn"
+            )
         if self.region == "kr":
-            return "KRW bn" if self._get_review_language() == "en" else "十亿韩元"
+            return choose_report_text(
+                review_language, zh="十亿韩元", zh_tw="十億韓元", other="KRW bn"
+            )
         if self.region == "tw":
-            return "TWD bn" if self._get_review_language() == "en" else "十億新台幣"
-        return "CNY 100m" if self._get_review_language() == "en" else "亿"
+            return choose_report_text(
+                review_language, zh="十億新台幣", zh_tw="十億新台幣", other="TWD bn"
+            )
+        return choose_report_text(review_language, zh="亿", zh_tw="億", other="CNY 100m")
 
     def _format_turnover_value(self, amount_raw: float) -> str:
         """Format raw turnover according to market-specific units."""
@@ -1063,6 +1086,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                     f"Turnover {overview.total_amount:.0f} ({self._get_turnover_unit_label()})"
                 )
             return "\n".join(lines)
+        # 这段不是提示词片段，是 _inject_data_into_review 直接拼进已渲染报告正文的，
+        # 所以字形必须跟着 report_language 走，否则繁体报告里会插进一整块简体。
+        review_language = self._get_review_language()
         lines = []
         score = light["score"] if isinstance(light, dict) else None
         label = light["temperature_label"] if isinstance(light, dict) else ""
@@ -1070,25 +1096,60 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         up_ratio = overview.up_count / participation if participation else 0.0
         limit_spread = overview.limit_up_count - overview.limit_down_count
         if isinstance(light, dict) and score is not None:
+            signal_label = choose_report_text(
+                review_language, zh="盘面信号", zh_tw="盤面訊號", other="Market Signal"
+            )
+            reason_label = choose_report_text(
+                review_language, zh="信号依据", zh_tw="訊號依據", other="Drivers"
+            )
+            guidance_label = choose_report_text(
+                review_language, zh="操作建议", zh_tw="操作建議", other="Guidance"
+            )
             lines.extend(
                 [
-                    f"- **盘面信号**：{score}/100（{label}，{light['label']}）",
-                    f"- **信号依据**：{'；'.join(light['reasons'])}",
-                    f"- **操作建议**：{light['guidance']}",
+                    f"- **{signal_label}**：{score}/100（{label}，{light['label']}）",
+                    f"- **{reason_label}**：{'；'.join(light['reasons'])}",
+                    f"- **{guidance_label}**：{light['guidance']}",
                 ]
             )
         if has_stats:
             if lines:
                 lines.append("")
-            lines.extend(
-                [
-                    "| 指标 | 数值 | 观察 |",
-                    "|------|------|------|",
-                    f"| 上涨/下跌/平盘 | {overview.up_count} / {overview.down_count} / {overview.flat_count} | 上涨占比(不含平盘) {up_ratio:.1%} |",
-                    f"| 涨停/跌停 | {overview.limit_up_count} / {overview.limit_down_count} | 涨跌停差 {limit_spread:+d} |",
-                    f"| 两市成交额 | {overview.total_amount:.0f} 亿 | {self._describe_turnover(overview.total_amount)} |",
-                ]
+            header = choose_report_text(
+                review_language,
+                zh="| 指标 | 数值 | 观察 |",
+                zh_tw="| 指標 | 數值 | 觀察 |",
+                other="| Metric | Value | Observation |",
             )
+            breadth_row = choose_report_text(
+                review_language,
+                zh=f"| 上涨/下跌/平盘 | {overview.up_count} / {overview.down_count} / "
+                f"{overview.flat_count} | 上涨占比(不含平盘) {up_ratio:.1%} |",
+                zh_tw=f"| 上漲/下跌/平盤 | {overview.up_count} / {overview.down_count} / "
+                f"{overview.flat_count} | 上漲占比(不含平盤) {up_ratio:.1%} |",
+                other=f"| Advancers/Decliners/Flat | {overview.up_count} / "
+                f"{overview.down_count} / {overview.flat_count} | "
+                f"Advancer share (ex-flat) {up_ratio:.1%} |",
+            )
+            limit_row = choose_report_text(
+                review_language,
+                zh=f"| 涨停/跌停 | {overview.limit_up_count} / {overview.limit_down_count} | "
+                f"涨跌停差 {limit_spread:+d} |",
+                zh_tw=f"| 漲停/跌停 | {overview.limit_up_count} / {overview.limit_down_count} | "
+                f"漲跌停差 {limit_spread:+d} |",
+                other=f"| Limit-up/Limit-down | {overview.limit_up_count} / "
+                f"{overview.limit_down_count} | Spread {limit_spread:+d} |",
+            )
+            turnover_row = choose_report_text(
+                review_language,
+                zh=f"| 两市成交额 | {overview.total_amount:.0f} 亿 | "
+                f"{self._describe_turnover(overview.total_amount)} |",
+                zh_tw=f"| 兩市成交額 | {overview.total_amount:.0f} 億 | "
+                f"{self._describe_turnover(overview.total_amount)} |",
+                other=f"| Turnover | {overview.total_amount:.0f} | "
+                f"{self._describe_turnover(overview.total_amount)} |",
+            )
+            lines.extend([header, "|------|------|------|", breadth_row, limit_row, turnover_row])
         return "\n".join(lines)
 
     def build_market_light_snapshot(self, overview: MarketOverview) -> Dict[str, Any]:
@@ -1103,7 +1164,10 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         else:
             status = "red"
 
-        if self._get_review_language() == "en":
+        # 这些值不只进报告正文，还经 payload["market_light"] 外流到 API/Web/通知与分享图，
+        # 所以字形必须跟着 report_language 走，否则繁体报告的海报上会出现简体温度词。
+        review_language = self._get_review_language()
+        if review_language == "en":
             label_map = {
                 "green": "risk-on",
                 "yellow": "balanced",
@@ -1117,16 +1181,37 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             reasons = self._build_market_light_reasons_en(overview, score)
         else:
             label_map = {
-                "green": "可进攻",
-                "yellow": "需观察",
-                "red": "偏防守",
+                "green": choose_report_text(
+                    review_language, zh="可进攻", zh_tw="可進攻", other="risk-on"
+                ),
+                "yellow": choose_report_text(
+                    review_language, zh="需观察", zh_tw="需觀察", other="balanced"
+                ),
+                "red": choose_report_text(
+                    review_language, zh="偏防守", zh_tw="偏防守", other="risk-off"
+                ),
             }
             guidance_map = {
-                "green": "风险偏好尚可，关注主线延续与仓位纪律。",
-                "yellow": "信号分化，控制仓位并等待量价确认。",
-                "red": "风险偏高，优先控制回撤，避免追高弱反弹。",
+                "green": choose_report_text(
+                    review_language,
+                    zh="风险偏好尚可，关注主线延续与仓位纪律。",
+                    zh_tw="風險偏好尚可，留意主流類股延續與部位紀律。",
+                    other="Risk appetite is acceptable; focus on leading themes and position discipline.",
+                ),
+                "yellow": choose_report_text(
+                    review_language,
+                    zh="信号分化，控制仓位并等待量价确认。",
+                    zh_tw="訊號分歧，控制部位並等待量價確認。",
+                    other="Signals are mixed; keep position sizing moderate and wait for confirmation.",
+                ),
+                "red": choose_report_text(
+                    review_language,
+                    zh="风险偏高，优先控制回撤，避免追高弱反弹。",
+                    zh_tw="風險偏高，優先控制回檔，避免追高弱反彈。",
+                    other="Risk is elevated; prioritize drawdown control and avoid chasing weak rebounds.",
+                ),
             }
-            reasons = self._build_market_light_reasons_zh(overview, score)
+            reasons = self._build_market_light_reasons_zh(overview, score, review_language)
 
         snapshot = MarketLightSnapshot(
             region=self.region,
@@ -1142,27 +1227,84 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         )
         return snapshot.model_dump()
 
-    def _build_market_light_reasons_zh(self, overview: MarketOverview, score: int) -> List[str]:
+    def _build_market_light_reasons_zh(
+        self,
+        overview: MarketOverview,
+        score: int,
+        review_language: str | None = None,
+    ) -> List[str]:
+        review_language = review_language or self._get_review_language()
         participation = overview.up_count + overview.down_count
         up_ratio = overview.up_count / participation if participation else None
         reasons: List[str] = []
         if up_ratio is not None:
             if up_ratio >= 0.6:
-                reasons.append(f"上涨家数占比 {up_ratio:.0%}，赚钱效应扩散")
+                reasons.append(
+                    choose_report_text(
+                        review_language,
+                        zh=f"上涨家数占比 {up_ratio:.0%}，赚钱效应扩散",
+                        zh_tw=f"上漲家數占比 {up_ratio:.0%}，賺錢效應擴散",
+                        other=f"advancers ratio {up_ratio:.0%}, breadth is expanding",
+                    )
+                )
             elif up_ratio <= 0.4:
-                reasons.append(f"上涨家数占比 {up_ratio:.0%}，亏钱效应较强")
+                reasons.append(
+                    choose_report_text(
+                        review_language,
+                        zh=f"上涨家数占比 {up_ratio:.0%}，亏钱效应较强",
+                        zh_tw=f"上漲家數占比 {up_ratio:.0%}，虧錢效應較強",
+                        other=f"advancers ratio {up_ratio:.0%}, downside pressure dominates",
+                    )
+                )
             else:
-                reasons.append(f"上涨家数占比 {up_ratio:.0%}，市场分化")
+                reasons.append(
+                    choose_report_text(
+                        review_language,
+                        zh=f"上涨家数占比 {up_ratio:.0%}，市场分化",
+                        zh_tw=f"上漲家數占比 {up_ratio:.0%}，市場分歧",
+                        other=f"advancers ratio {up_ratio:.0%}, breadth is mixed",
+                    )
+                )
         index_changes = [idx.change_pct for idx in overview.indices if idx.change_pct is not None]
         if index_changes:
             avg_change = sum(index_changes) / len(index_changes)
-            reasons.append(f"主要指数平均涨跌幅 {avg_change:+.2f}%")
+            reasons.append(
+                choose_report_text(
+                    review_language,
+                    zh=f"主要指数平均涨跌幅 {avg_change:+.2f}%",
+                    zh_tw=f"主要指數平均漲跌幅 {avg_change:+.2f}%",
+                    other=f"average major-index change {avg_change:+.2f}%",
+                )
+            )
         if overview.limit_up_count or overview.limit_down_count:
-            reasons.append(f"涨跌停差 {overview.limit_up_count - overview.limit_down_count:+d}")
+            limit_spread = overview.limit_up_count - overview.limit_down_count
+            reasons.append(
+                choose_report_text(
+                    review_language,
+                    zh=f"涨跌停差 {limit_spread:+d}",
+                    zh_tw=f"漲跌停差 {limit_spread:+d}",
+                    other=f"limit-up/down spread {limit_spread:+d}",
+                )
+            )
         if not reasons and overview.total_amount:
-            reasons.append(f"成交额 {overview.total_amount:.0f} 亿，{self._describe_turnover(overview.total_amount)}")
+            turnover_note = self._describe_turnover(overview.total_amount, review_language)
+            reasons.append(
+                choose_report_text(
+                    review_language,
+                    zh=f"成交额 {overview.total_amount:.0f} 亿，{turnover_note}",
+                    zh_tw=f"成交額 {overview.total_amount:.0f} 億，{turnover_note}",
+                    other=f"turnover {overview.total_amount:.0f}, {turnover_note}",
+                )
+            )
         if not reasons:
-            reasons.append("结构化涨跌数据有限，按可用行情综合判断")
+            reasons.append(
+                choose_report_text(
+                    review_language,
+                    zh="结构化涨跌数据有限，按可用行情综合判断",
+                    zh_tw="結構化漲跌數據有限，依可用行情綜合判斷",
+                    other="limited structured breadth data; using available market inputs",
+                )
+            )
         return reasons[:4]
 
     def _build_market_light_reasons_en(self, overview: MarketOverview, score: int) -> List[str]:
@@ -1540,15 +1682,23 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
     def _escape_markdown_link_label(value: str) -> str:
         return value.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
 
-    @staticmethod
-    def _describe_turnover(total_amount: float) -> str:
+    def _describe_turnover(self, total_amount: float, review_language: str | None = None) -> str:
+        review_language = review_language or self._get_review_language()
         if total_amount >= 15000:
-            return "高活跃度"
+            return choose_report_text(
+                review_language, zh="高活跃度", zh_tw="高活躍度", other="high activity"
+            )
         if total_amount >= 9000:
-            return "中等活跃"
+            return choose_report_text(
+                review_language, zh="中等活跃", zh_tw="中等活躍", other="moderate activity"
+            )
         if total_amount > 0:
-            return "缩量观望"
-        return "暂无数据"
+            return choose_report_text(
+                review_language, zh="缩量观望", zh_tw="量縮觀望", other="volume contraction"
+            )
+        return choose_report_text(
+            review_language, zh="暂无数据", zh_tw="暫無數據", other="no data"
+        )
 
     def _build_market_light_scores(self, overview: MarketOverview) -> Dict[str, Any]:
         """Build the canonical Market Light scores used by reports and alerts."""
@@ -1586,7 +1736,8 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             data_quality = "partial"
 
         score = int(round(breadth_score * 0.45 + index_score * 0.35 + limit_score * 0.20))
-        if self._get_review_language() == "en":
+        review_language = self._get_review_language()
+        if review_language == "en":
             if score >= 70:
                 label = "risk-on"
             elif score >= 55:
@@ -1595,15 +1746,14 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 label = "mixed"
             else:
                 label = "defensive"
+        elif score >= 70:
+            label = choose_report_text(review_language, zh="强势", zh_tw="強勢", other="risk-on")
+        elif score >= 55:
+            label = choose_report_text(review_language, zh="偏暖", zh_tw="偏暖", other="constructive")
+        elif score >= 40:
+            label = choose_report_text(review_language, zh="震荡", zh_tw="盤整", other="mixed")
         else:
-            if score >= 70:
-                label = "强势"
-            elif score >= 55:
-                label = "偏暖"
-            elif score >= 40:
-                label = "震荡"
-            else:
-                label = "偏弱"
+            label = choose_report_text(review_language, zh="偏弱", zh_tw="偏弱", other="defensive")
         return {
             "score": score,
             "temperature_label": label,
@@ -1658,8 +1808,14 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             ])
             return "\n\n".join(sections)
 
+        def pick(zh: str, zh_tw: str) -> str:
+            return choose_report_text(review_language, zh=zh, zh_tw=zh_tw, other=zh)
+
+        # 数据最完整的区域（cn）走这条整段模板。它此前是写死的简体字面值，
+        # 绕过下面的 pick()，于是 zh-tw 报告的输出模板会繁简标题交错。
         if self.profile.has_market_stats and self.profile.has_sector_rankings:
-            return """### 三、板块主线
+            return pick(
+                """### 三、板块主线
 （区分行业板块与概念题材，分析领涨/领跌背后的逻辑、持续性和是否形成主线）
 
 ### 四、资金与情绪
@@ -1672,7 +1828,22 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 （给出进攻/均衡/防守结论、仓位区间、关注方向、回避方向和一个触发失效条件）
 
 ### 七、风险提示
-（列出需要关注的风险点；最后补充“建议仅供参考，不构成投资建议”。）"""
+（列出需要关注的风险点；最后补充“建议仅供参考，不构成投资建议”。）""",
+                """### 三、類股主線
+（區分產業類股與概念題材，分析領漲/領跌背後的邏輯、持續性和是否形成主線）
+
+### 四、資金與情緒
+（解讀成交額、漲跌停結構、市場寬度和風險偏好）
+
+### 五、消息催化
+（結合近三日新聞，提煉真正影響明日交易的催化或擾動）
+
+### 六、明日交易計劃
+（給出進攻/均衡/防守結論、部位區間、關注方向、迴避方向和一個觸發失效條件）
+
+### 七、風險提示
+（列出需要關注的風險點；最後補充「建議僅供參考，不構成投資建議」。）""",
+            )
 
         numerals = ["一", "二", "三", "四", "五", "六", "七", "八"]
         section_number = 3
@@ -1682,9 +1853,6 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             nonlocal section_number
             sections.append(f"### {numerals[section_number - 1]}、{title}\n{hint}")
             section_number += 1
-
-        def pick(zh: str, zh_tw: str) -> str:
-            return choose_report_text(review_language, zh=zh, zh_tw=zh_tw, other=zh)
 
         if self.profile.has_sector_rankings:
             add_section(
@@ -1789,17 +1957,43 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
                 data_limits_block = "## Data Limits\n" + "\n".join(data_limit_lines)
         else:
             if self.profile.has_market_stats:
-                stats_block = f"""## 市场概况
+                stats_block = choose_report_text(
+                    review_language,
+                    zh=f"""## 市场概况
 - 上涨: {overview.up_count} 家 | 下跌: {overview.down_count} 家 | 平盘: {overview.flat_count} 家
 - 涨停: {overview.limit_up_count} 家 | 跌停: {overview.limit_down_count} 家
-- 两市成交额: {overview.total_amount:.0f} 亿元"""
+- 两市成交额: {overview.total_amount:.0f} 亿元""",
+                    zh_tw=f"""## 市場概況
+- 上漲: {overview.up_count} 家 | 下跌: {overview.down_count} 家 | 平盤: {overview.flat_count} 家
+- 漲停: {overview.limit_up_count} 家 | 跌停: {overview.limit_down_count} 家
+- 兩市成交額: {overview.total_amount:.0f} 億元""",
+                    other=f"""## 市场概况
+- 上涨: {overview.up_count} 家 | 下跌: {overview.down_count} 家 | 平盘: {overview.flat_count} 家
+- 涨停: {overview.limit_up_count} 家 | 跌停: {overview.limit_down_count} 家
+- 两市成交额: {overview.total_amount:.0f} 亿元""",
+                )
 
             if self.profile.has_sector_rankings:
-                sector_block = f"""## 板块表现
-行业领涨: {top_sectors_text if top_sectors_text else "暂无数据"}
-行业领跌: {bottom_sectors_text if bottom_sectors_text else "暂无数据"}
-概念领涨: {top_concepts_text if top_concepts_text else "暂无数据"}
-概念领跌: {bottom_concepts_text if bottom_concepts_text else "暂无数据"}"""
+                zh_none = "暂无数据"
+                tw_none = "暫無資料"
+                sector_block = choose_report_text(
+                    review_language,
+                    zh=f"""## 板块表现
+行业领涨: {top_sectors_text if top_sectors_text else zh_none}
+行业领跌: {bottom_sectors_text if bottom_sectors_text else zh_none}
+概念领涨: {top_concepts_text if top_concepts_text else zh_none}
+概念领跌: {bottom_concepts_text if bottom_concepts_text else zh_none}""",
+                    zh_tw=f"""## 類股表現
+產業領漲: {top_sectors_text if top_sectors_text else tw_none}
+產業領跌: {bottom_sectors_text if bottom_sectors_text else tw_none}
+概念領漲: {top_concepts_text if top_concepts_text else tw_none}
+概念領跌: {bottom_concepts_text if bottom_concepts_text else tw_none}""",
+                    other=f"""## 板块表现
+行业领涨: {top_sectors_text if top_sectors_text else zh_none}
+行业领跌: {bottom_sectors_text if bottom_sectors_text else zh_none}
+概念领涨: {top_concepts_text if top_concepts_text else zh_none}
+概念领跌: {bottom_concepts_text if bottom_concepts_text else zh_none}""",
+                )
 
             data_limit_lines = []
             if not self.profile.has_market_stats:
@@ -1917,18 +2111,25 @@ Concept lagging: {bottom_concepts_text if bottom_concepts_text else "N/A"}"""
                 other="报告要像交易员盘后工作台：先给结论，再按指数、新闻催化和计划展开",
             )
         )
-        # 台股報告以繁體中文（台灣用語）輸出，與台灣使用者的閱讀習慣一致；
-        # cn/hk/jp/kr 維持既有簡體輸出，不受影響。
+        # 字形跟着 report_language 走，不跟区域走。个股路径（src/analyzer.py）已经
+        # 采用这个契约，大盘复盘再按区域判定，会让同一次推送里个股是繁体、大盘是简体；
+        # 反过来 region=tw 配 REPORT_LANGUAGE=zh 时，也只会在简体提示里插进一行繁体要求。
         zh_script_requirement = (
             "\n- 全文必須使用繁體中文並採用台灣金融用語（例如：籌碼、權值股、當沖、"
             "融資融券、伺服器），不得輸出簡體字"
-            if self.region == "tw"
+            if review_language == "zh-tw"
             else ""
         )
         # 僅 tw：引用上櫃補充資料時必須標明「上櫃」口徑，不得推論為台股全市場。
         tw_scope_requirement_zh = (
-            "\n- 引用「上櫃市場補充資料」數據時，必須明確標示「上櫃」口徑，"
-            "不得推論或改寫為台股全市場的漲跌家數或市場寬度"
+            choose_report_text(
+                review_language,
+                zh="\n- 引用「上柜市场补充资料」数据时，必须明确标示「上柜」口径，"
+                "不得推论或改写为台股全市场的涨跌家数或市场宽度",
+                zh_tw="\n- 引用「上櫃市場補充資料」數據時，必須明確標示「上櫃」口徑，"
+                "不得推論或改寫為台股全市場的漲跌家數或市場寬度",
+                other="",
+            )
             if self.region == "tw"
             else ""
         )

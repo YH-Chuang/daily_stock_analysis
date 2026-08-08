@@ -146,7 +146,8 @@ def test_request_models_accept_korean_report_language() -> None:
         ("tw", "tw"),
         ("TW", "tw"),
         ("tw,jp", "jp,tw"),
-        ("both", "cn,hk,us,jp,kr,tw"),
+        ("both", "cn,hk,us,jp,kr"),
+        ("cn,hk,us,jp,kr,tw", "cn,hk,us,jp,kr,tw"),
     ],
 )
 def test_market_review_request_normalizes_strict_region_input(

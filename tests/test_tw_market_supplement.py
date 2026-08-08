@@ -202,13 +202,26 @@ class TestTwSupplementBlockPromptWiring(unittest.TestCase):
         with patch.object(analyzer, "_get_tw_index_fetcher", return_value=fake_fetcher):
             prompt = analyzer._build_review_prompt(MarketOverview(date="2026-08-06"), [])
 
+        # 注入的台股參考資料保留來源字形（櫃買／上櫃／類股都是台灣官方名詞）。
         self.assertIn("## 上櫃市場補充資料", prompt)
         self.assertIn("僅涵蓋上櫃", prompt)
         self.assertIn("不是漲跌幅排行", prompt)
-        # 輸出要求需追加一行，要求引用上櫃數據時標明口徑。
-        self.assertIn("必須明確標示「上櫃」口徑", prompt)
+        # 但輸出要求那一行屬於報告骨架，字形跟著 report_language 走：
+        # REPORT_LANGUAGE=zh 時給簡體，不再在簡體提示裡插一行繁體。
+        self.assertIn("必须明确标示「上柜」口径", prompt)
+        self.assertNotIn("必須明確標示「上櫃」口徑", prompt)
         # 區塊須落在 data_limits_block 之後、市场新闻之前。
         self.assertLess(prompt.index("## 上櫃市場補充資料"), prompt.index("## 市场新闻"))
+
+    def test_zh_tw_prompt_scope_requirement_is_traditional(self):
+        """REPORT_LANGUAGE=zh-tw 時，同一行輸出要求必須是繁體。"""
+        analyzer = _tw_analyzer("zh-tw")
+        fake_fetcher = _FakeTwIndexFetcher(highlight=_HIGHLIGHT, sectors=_SECTORS)
+        with patch.object(analyzer, "_get_tw_index_fetcher", return_value=fake_fetcher):
+            prompt = analyzer._build_review_prompt(MarketOverview(date="2026-08-06"), [])
+
+        self.assertIn("必須明確標示「上櫃」口徑", prompt)
+        self.assertIn("全文必須使用繁體中文", prompt)
 
     def test_en_prompt_includes_supplement_block_and_scope_requirement(self):
         analyzer = _tw_analyzer("en")
