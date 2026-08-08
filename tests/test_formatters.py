@@ -421,7 +421,10 @@ class TestNotificationMarkdownFormatters(unittest.TestCase):
         result = format_telegram_markdown(text)
 
         self.assertIn("*\\[P4\\] 日报*", result)
-        self.assertIn("- 600519：\\[P4\\] 强势 \\(观察\\)", result)
+        # Brackets stay escaped (legacy Markdown treats [ as link markup), but
+        # parens must NOT be: legacy Markdown never unescapes them, so a
+        # backslash there is delivered literally to the reader.
+        self.assertIn("- 600519：\\[P4\\] 强势 (观察)", result)
         self.assertIn("[详情](https://example.com/report)", result)
 
     def test_slack_formatter_uses_mrkdwn_links_and_tables(self):

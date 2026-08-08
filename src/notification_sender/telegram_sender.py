@@ -13,7 +13,7 @@ import time
 import re
 
 from src.config import Config
-from src.formatters import strip_hidden_markdown_metadata
+from src.formatters import format_telegram_markdown, strip_hidden_markdown_metadata
 
 
 logger = logging.getLogger(__name__)
@@ -365,38 +365,26 @@ class TelegramSender:
             return False
 
     def _convert_to_telegram_markdown(self, text: str) -> str:
+        """Convert report Markdown to Telegram legacy Markdown.
+
+        Delegates to the shared formatter so Telegram gets the same table
+        flattening every other channel already gets. The private implementation
+        this replaced deleted heading markers outright and passed pipe tables
+        through untouched, which is what made the pushed report a wall of text.
         """
-        将标准 Markdown 转换为 Telegram 支持的格式
+        result = format_telegram_markdown(strip_hidden_markdown_metadata(text))
+        return self._neutralize_unbalanced_markup(result)
 
-        Telegram Markdown 限制：
-        - 不支持 # 标题
-        - 使用 *bold* 而非 **bold**
-        - 使用 _italic_
+    @staticmethod
+    def _neutralize_unbalanced_markup(text: str) -> str:
+        """Drop markup chars that appear an odd number of times.
+
+        Telegram rejects the entire message when an entity is left open, and the
+        sender then degrades to unformatted plain text. Losing one style is
+        better than losing all of them, so an unpaired * or _ is stripped
+        rather than sent.
         """
-        result = strip_hidden_markdown_metadata(text)
-
-        # 移除 # 标题标记（Telegram 不支持）
-        result = re.sub(r'^#{1,6}\s+', '', result, flags=re.MULTILINE)
-
-        # 转换 **bold** 为 *bold*
-        result = re.sub(r'\*\*(.+?)\*\*', r'*\1*', result)
-
-        # Escape special characters for Telegram Markdown, but preserve link syntax [text](url)
-        # Step 1: temporarily protect markdown links
-        import uuid as _uuid
-        _link_placeholder = f"__LINK_{_uuid.uuid4().hex[:8]}__"
-        _links = []
-        def _save_link(m):
-            _links.append(m.group(0))
-            return f"{_link_placeholder}{len(_links) - 1}"
-        result = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _save_link, result)
-
-        # Step 2: escape remaining special chars
-        for char in ['[', ']', '(', ')']:
-            result = result.replace(char, f'\\{char}')
-
-        # Step 3: restore links
-        for i, link in enumerate(_links):
-            result = result.replace(f"{_link_placeholder}{i}", link)
-
-        return result
+        for char in ("*", "_"):
+            if text.count(char) % 2:
+                text = text.replace(char, "")
+        return text
