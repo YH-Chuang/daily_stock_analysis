@@ -2987,6 +2987,54 @@ Sector text.
         assert "#### Lagging Industry Sectors" in result
         assert "| 1 | 煤炭 | -1.12% |" in result
 
+    def test_inject_data_into_review_matches_traditional_chinese_headings(self):
+        """A Traditional review must receive the injected tables too.
+
+        _CHINESE_SECTION_PATTERNS matched Simplified headings only, so when the
+        model correctly obeyed the zh-tw 繁體 instruction and wrote 「### 二、指數結構」
+        nothing matched and the index table was silently dropped - Simplified
+        output got the data, Traditional output lost it, with no error either way.
+        """
+        from src.market_analyzer import MarketOverview, MarketIndex
+
+        ma = self._make_market_analyzer_with_mock_generate_text(return_value="review")
+        overview = MarketOverview(
+            date="2026-03-05",
+            indices=[
+                MarketIndex(
+                    code="TWII",
+                    name="台灣加權指數",
+                    current=44225.91,
+                    change=-168.0,
+                    change_pct=-0.38,
+                    open=44450.19,
+                    high=44827.13,
+                    low=44100.0,
+                    amount=145000000000.0,
+                    amplitude=1.6,
+                )
+            ],
+        )
+        review = """## 2026-03-05 台灣市場大盤復盤
+
+### 一、盤面總覽
+總結。
+
+### 二、指數結構
+指數。
+
+### 五、消息催化
+新聞。
+"""
+
+        result = ma._inject_data_into_review(review, overview, [])
+
+        # The whole point: the table reached the report despite Traditional headings.
+        assert "台灣加權指數" in result
+        assert "44225.91" in result
+        # And the Traditional headings themselves survive untouched.
+        assert "### 二、指數結構" in result
+
     def test_inject_data_into_review_matches_reference_style_chinese_headings(self):
         from src.market_analyzer import MarketOverview, MarketIndex
 

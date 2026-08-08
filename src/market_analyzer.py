@@ -44,12 +44,16 @@ _ENGLISH_SECTION_PATTERNS = {
     "sector_highlights": r"###\s*(?:4\.\s*)?(?:Sector Highlights|Sector/Theme Highlights)",
 }
 
+# Both scripts on purpose: the report body is Simplified under zh and Traditional
+# under zh-tw, and _inject_data_into_review has to find the section either way.
+# When these matched Simplified only, a correctly-Traditional review silently lost
+# its injected index table.
 _CHINESE_SECTION_PATTERNS = {
-    "market_summary": r"###\s*一、(?:盘面总览|市场总结)",
-    "index_commentary": r"###\s*二、(?:指数结构|指数点评|主要指数)",
-    "sector_highlights": r"###\s*三、(?:板块主线|热点解读|板块表现)",
-    "funds_sentiment": r"###\s*四、(?:资金与情绪|资金动向)",
-    "news_catalysts": r"###\s*五、(?:消息催化|后市展望)",
+    "market_summary": r"###\s*一、(?:盘面总览|市场总结|盤面總覽|市場總結)",
+    "index_commentary": r"###\s*二、(?:指数结构|指数点评|主要指数|指數結構|指數點評|主要指數)",
+    "sector_highlights": r"###\s*三、(?:板块主线|热点解读|板块表现|類股主線|板塊主線|熱點解讀|板塊表現)",
+    "funds_sentiment": r"###\s*四、(?:资金与情绪|资金动向|資金與情緒|資金動向)",
+    "news_catalysts": r"###\s*五、(?:消息催化|后市展望|後市展望)",
 }
 
 

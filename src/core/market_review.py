@@ -685,6 +685,8 @@ def _markdown_has_sector_table(markdown: Any, *, title_prefix: str = "") -> bool
         title = title_prefix.strip()
         prefixed_markers = (
             f"### {title} / 板块主线",
+            f"### {title} / 類股主線",
+            f"### {title} / 板塊主線",
             f"### {title} / Sector Highlights",
         )
         if any(marker in text for marker in prefixed_markers):
@@ -727,12 +729,18 @@ def _markdown_contains_sector_markers(text: str) -> bool:
         "#### 领跌板块",
         "#### 行业板块领涨",
         "#### 行业板块领跌",
+        "#### 領漲類股",
+        "#### 領跌類股",
+        "#### 產業類股領漲",
+        "#### 產業類股領跌",
         "#### Leading Sectors",
         "#### Lagging Sectors",
         "#### Leading Industry Sectors",
         "#### Lagging Industry Sectors",
         "| 排名 | 板块 |",
         "| 排名 | 行业板块 |",
+        "| 排名 | 類股 |",
+        "| 排名 | 產業類股 |",
         "| Rank | Sector |",
     )
     return any(marker in text for marker in markers)

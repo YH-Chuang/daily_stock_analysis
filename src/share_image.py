@@ -29,7 +29,8 @@ PROJECT_URL = "https://github.com/ZhuLinsen/daily_stock_analysis"
 PROJECT_REPOSITORY = "ZhuLinsen/daily_stock_analysis"
 PROJECT_DISPLAY_NAME = "股票智能分析系统"
 _MARKET_RE = re.compile(
-    r"(?:大盘复盘|市场复盘|market\s+(?:review|recap)|시황\s*리뷰)", re.IGNORECASE
+    r"(?:大盘复盘|市场复盘|大盤復盤|市場復盤|market\s+(?:review|recap)|시황\s*리뷰)",
+    re.IGNORECASE,
 )
 _MARKET_SCOPE_RE = re.compile(
     r"(?:A股|港股|美股|日股|韩股|台股|中国\s*A주|미국|홍콩|일본|한국|대만|\b(?:cn|hk|us|jp|kr|tw)\b|a[-\s]?share|hong\s+kong|japan|korea|taiwan|u\.?s\.?)",
@@ -1097,7 +1098,7 @@ def _stock_data(markdown_text: str, generated_on: date) -> StockPoster:
         poster.risks = [
             _compact_text(item, limit=36)
             for item in _section_items(
-                _section(markdown_text, "风险提示", "risk warning", "risk alerts"), limit=2
+                _section(markdown_text, "风险提示", "風險提示", "risk warning", "risk alerts"), limit=2
             )
         ]
 
@@ -1380,7 +1381,7 @@ def _direction_items(value: object, *, limit: int = 2) -> list[str]:
 
 
 def _market_fund_metrics(markdown_text: str) -> list[tuple[str, str, str]]:
-    section = _section(markdown_text, "资金与情绪", "fund flows", "liquidity & sentiment")
+    section = _section(markdown_text, "资金与情绪", "資金與情緒", "fund flows", "liquidity & sentiment")
     if not section:
         return []
     metrics: list[tuple[str, str, str]] = []
@@ -1401,7 +1402,7 @@ def _market_fund_metrics(markdown_text: str) -> list[tuple[str, str, str]]:
 
 
 def _market_data(markdown_text: str, generated_on: date) -> MarketPoster:
-    overview = _section(markdown_text, "盘面总览", "market summary", "breadth & liquidity", "시장 요약")
+    overview = _section(markdown_text, "盘面总览", "盤面總覽", "market summary", "breadth & liquidity", "시장 요약")
     score_match = re.search(
         r"(?:盘面信号|市场信号|market signal|시장 신호)\*{0,2}\s*[:：]\s*(\d{1,3})/100(?:\s*[（(]([^，,)]+)[，,]\s*([^）)]+)[）)])?",
         markdown_text,
@@ -1430,7 +1431,7 @@ def _market_data(markdown_text: str, generated_on: date) -> MarketPoster:
     if not poster.reasons and poster.summary:
         poster.reasons = _sentences(poster.summary, limit=2)
 
-    index_section = _section(markdown_text, "指数结构", "major indices", "index commentary", "주요 지수", "지수 구조")
+    index_section = _section(markdown_text, "指数结构", "指數結構", "major indices", "index commentary", "주요 지수", "지수 구조")
     index_table = (
         _find_table(index_section, "指数", "涨跌幅")
         or _find_table(index_section, "index", "change")
@@ -1501,7 +1502,7 @@ def _market_data(markdown_text: str, generated_on: date) -> MarketPoster:
                 tone = "primary"
             poster.breadth.append((label, value, tone))
 
-    sector_section = _section(markdown_text, "板块主线", "sector highlights", "섹터 하이라이트", "주도 섹터")
+    sector_section = _section(markdown_text, "板块主线", "類股主線", "sector highlights", "섹터 하이라이트", "주도 섹터")
     sector_table = (
         _find_table(sector_section, "板块", "涨跌幅")
         or _find_table(sector_section, "sector", "change")
@@ -1550,7 +1551,7 @@ def _market_data(markdown_text: str, generated_on: date) -> MarketPoster:
         _compact_text(item, limit=34)
         for item in (_section_items(catalyst_section, limit=2) or _sentences(catalyst_section, limit=2))
     ]
-    plan_section = _section(markdown_text, "明日交易计划", "strategy plan", "outlook", "내일 거래 계획", "내일 계획")
+    plan_section = _section(markdown_text, "明日交易计划", "明日交易計劃", "strategy plan", "outlook", "내일 거래 계획", "내일 계획")
     poster.focus = _direction_items(
         _labeled_value(plan_section, "关注方向", "focus", "관심 방향", limit=220)
     )
@@ -1572,7 +1573,7 @@ def _market_data(markdown_text: str, generated_on: date) -> MarketPoster:
     poster.risks = [
         _compact_text(item, limit=34)
         for item in _section_items(
-            _section(markdown_text, "风险提示", "risk alerts", "리스크 경보", "리스크 경고"),
+            _section(markdown_text, "风险提示", "風險提示", "risk alerts", "리스크 경보", "리스크 경고"),
             limit=2,
         )
     ]
@@ -1697,15 +1698,15 @@ def _market_data_from_payload(
 def _should_keep_market_fallback(markdown_text: str, data: MarketPoster) -> bool:
     expected_sections = (
         (
-            _has_meaningful_section(markdown_text, "盘面总览", "market summary", "breadth & liquidity", "시장 요약"),
+            _has_meaningful_section(markdown_text, "盘面总览", "盤面總覽", "market summary", "breadth & liquidity", "시장 요약"),
             any((data.score, data.guidance, data.reasons, data.summary, data.breadth)),
         ),
         (
-            _has_meaningful_section(markdown_text, "指数结构", "major indices", "index commentary", "주요 지수", "지수 구조"),
+            _has_meaningful_section(markdown_text, "指数结构", "指數結構", "major indices", "index commentary", "주요 지수", "지수 구조"),
             bool(data.indices),
         ),
         (
-            _has_meaningful_section(markdown_text, "板块主线", "sector highlights", "섹터 하이라이트", "주도 섹터"),
+            _has_meaningful_section(markdown_text, "板块主线", "類股主線", "sector highlights", "섹터 하이라이트", "주도 섹터"),
             bool(data.sectors),
         ),
         (
@@ -1713,11 +1714,11 @@ def _should_keep_market_fallback(markdown_text: str, data: MarketPoster) -> bool
             bool(data.catalysts),
         ),
         (
-            _has_meaningful_section(markdown_text, "明日交易计划", "strategy plan", "outlook", "내일 거래 계획", "내일 계획"),
+            _has_meaningful_section(markdown_text, "明日交易计划", "明日交易計劃", "strategy plan", "outlook", "내일 거래 계획", "내일 계획"),
             bool(data.plan),
         ),
         (
-            _has_meaningful_section(markdown_text, "风险提示", "risk alerts", "리스크 경보", "리스크 경고"),
+            _has_meaningful_section(markdown_text, "风险提示", "風險提示", "risk alerts", "리스크 경보", "리스크 경고"),
             bool(data.risks),
         ),
     )
