@@ -377,12 +377,20 @@ class MainScheduleModeTestCase(unittest.TestCase):
 
     @staticmethod
     def _started_uvicorn_stub():
-        """A uvicorn stand-in whose server reports a successful startup."""
+        """A uvicorn stand-in whose server already reports a successful startup.
+
+        ``started`` is true from construction rather than from ``run()`` so the
+        caller can also patch ``threading.Thread`` and still get a prompt return.
+        That matters: letting a real server thread outlive the surrounding
+        ``patch.dict("sys.modules", ...)`` races with its teardown, which clears
+        sys.modules before restoring the snapshot -- an import landing in that
+        window sees an empty module table.
+        """
 
         class _StartedServer:
             def __init__(self, config):
                 self.config = config
-                self.started = False
+                self.started = True
 
             def run(self) -> None:
                 self.started = True
@@ -491,10 +499,13 @@ class MainScheduleModeTestCase(unittest.TestCase):
             else:
                 self.skipTest("port did not enter TIME_WAIT on this platform")
 
+        # uvicorn is stubbed in sys.modules, so start_api_server's `import uvicorn`
+        # cannot trigger a fresh import while threading.Thread is patched, and no
+        # real server thread is left running when this block unwinds.
         with patch.dict(
             "sys.modules",
             {"uvicorn": self._started_uvicorn_stub(), **_api_app_stub_modules()},
-        ):
+        ), patch("threading.Thread"):
             main.start_api_server("127.0.0.1", port, config)
 
     def test_start_api_server_probe_skips_reuseaddr_on_windows(self) -> None:
