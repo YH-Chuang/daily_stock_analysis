@@ -1143,6 +1143,20 @@ def start_api_server(host: str, port: int, config: Config) -> None:
     import uvicorn
 
     probe = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_STREAM)
+    # Mirror the socket option the server itself will apply, so the probe is
+    # neither stricter nor looser than uvicorn. Server.run() without a pre-bound
+    # socket lands in loop.create_server(), and both asyncio and uvloop enable
+    # SO_REUSEADDR there only when os.name == "posix" and sys.platform != "cygwin".
+    # Without it the probe rejects a port that a previous instance only left in a
+    # residual state -- TIME_WAIT, or FIN_WAIT_2 while a browser still holds a
+    # keep-alive connection open -- that uvicorn would have bound fine.
+    # Keep the platform gate. On Linux (measured) SO_REUSEADDR still refuses a live
+    # listener, so the probe keeps its purpose; on Windows it would instead allow
+    # binding over one, turning the probe into a no-op on the platform the desktop
+    # build ships to. The probe only ever mirrors the server, so it can still never
+    # admit a port uvicorn itself would refuse.
+    if os.name == "posix" and sys.platform != "cygwin":
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         probe.bind((host, port))
     except OSError as exc:

@@ -269,6 +269,9 @@ class MainScheduleModeTestCase(unittest.TestCase):
         config = self._make_config(log_level="INFO")
 
         class BusySocket:
+            def setsockopt(self, level, optname, value):
+                pass
+
             def bind(self, address):
                 raise OSError("address already in use")
 
@@ -305,6 +308,9 @@ class MainScheduleModeTestCase(unittest.TestCase):
             Server = _FakeUvicornServer
 
         class _UnusedSocket:
+            def setsockopt(self, level, optname, value):
+                pass
+
             def bind(self, address):
                 pass
 
@@ -346,6 +352,9 @@ class MainScheduleModeTestCase(unittest.TestCase):
                     raise TypeError("install_signal_handlers is unsupported")
 
         class _UnusedSocket:
+            def setsockopt(self, level, optname, value):
+                pass
+
             def bind(self, address):
                 pass
 
@@ -365,6 +374,203 @@ class MainScheduleModeTestCase(unittest.TestCase):
         self.assertIsNotNone(_CompatServer.instance)
         self.assertTrue(callable(_CompatServer.instance.install_signal_handlers))
         self.assertTrue(_CompatServer.instance.started)
+
+    @staticmethod
+    def _started_uvicorn_stub():
+        """A uvicorn stand-in whose server already reports a successful startup.
+
+        ``started`` is true from construction rather than from ``run()`` so the
+        caller can also patch ``threading.Thread`` and still get a prompt return.
+        That matters: letting a real server thread outlive the surrounding
+        ``patch.dict("sys.modules", ...)`` races with its teardown, which clears
+        sys.modules before restoring the snapshot -- an import landing in that
+        window sees an empty module table.
+        """
+
+        class _StartedServer:
+            def __init__(self, config):
+                self.config = config
+                self.started = True
+
+            def run(self) -> None:
+                self.started = True
+
+        class _StartedConfig:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        return SimpleNamespace(Config=_StartedConfig, Server=_StartedServer)
+
+    def test_start_api_server_rejects_port_with_live_listener(self) -> None:
+        """The probe's whole purpose: a port with a live listener must still fail fast.
+
+        Uses a real socket rather than a fake so the SO_REUSEADDR change is
+        exercised against the kernel instead of against a stub.
+        """
+        config = self._make_config(log_level="INFO")
+        built: list[str] = []
+
+        class _NeverBuiltServer:
+            def __init__(self, config):
+                built.append("Server")
+
+            def run(self) -> None:  # pragma: no cover - must never be reached
+                built.append("run")
+
+        class _NeverBuiltConfig:
+            def __init__(self, *args, **kwargs):
+                built.append("Config")
+
+        try:
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        except (OSError, PermissionError) as exc:
+            self.skipTest(f"local socket creation is not permitted in this environment: {exc}")
+
+        with listener:
+            # Mirror the listener asyncio/uvloop would create, so the test proves
+            # the probe still refuses even the option-for-option identical case.
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                listener.bind(("127.0.0.1", 0))
+            except (OSError, PermissionError) as exc:
+                self.skipTest(f"local socket bind is not permitted in this environment: {exc}")
+            listener.listen(1)
+            port = listener.getsockname()[1]
+
+            # start_api_server imports uvicorn before it probes, so uvicorn must be
+            # stubbed rather than freshly imported here. Do NOT patch
+            # threading.Thread to assert "no thread was created": a real
+            # `import uvicorn` under that patch permanently rebinds
+            # anyio.from_thread.Thread to the mock, which silently breaks
+            # Starlette's TestClient portal for every later test in the process.
+            # Asserting that uvicorn was never even configured proves the probe
+            # failed earlier than the thread would have been created anyway.
+            with patch.dict(
+                "sys.modules",
+                {
+                    "uvicorn": SimpleNamespace(Config=_NeverBuiltConfig, Server=_NeverBuiltServer),
+                    **_api_app_stub_modules(),
+                },
+            ):
+                with self.assertRaises(RuntimeError) as caught:
+                    main.start_api_server("127.0.0.1", port, config)
+
+        self.assertIn(f"127.0.0.1:{port}", str(caught.exception))
+        # The probe must fail before uvicorn is configured, before the server
+        # thread, and before the heavy api.app import.
+        self.assertEqual(built, [])
+
+    def test_start_api_server_accepts_port_left_in_time_wait(self) -> None:
+        """A port holding only a residual socket is bindable by uvicorn, so the probe must allow it.
+
+        Regression for restarting the service right after stopping it, which used to
+        fail with "FastAPI port is not available". TIME_WAIT is used here because it
+        is deterministic to manufacture; in practice the more common trigger is
+        FIN_WAIT_2, left when a browser still holds a keep-alive connection open.
+        """
+        config = self._make_config(log_level="INFO")
+
+        try:
+            server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_sock.bind(("127.0.0.1", 0))
+            server_sock.listen(1)
+            port = server_sock.getsockname()[1]
+            client = socket.create_connection(("127.0.0.1", port))
+            accepted, _ = server_sock.accept()
+        except (OSError, PermissionError) as exc:
+            self.skipTest(f"local socket setup is not permitted in this environment: {exc}")
+
+        # Closing the accepted connection from the server side first leaves the
+        # listening address in TIME_WAIT.
+        accepted.close()
+        client.close()
+        server_sock.close()
+
+        # Self-guard: not every platform/kernel leaves a TIME_WAIT entry here. If a
+        # bare bind already succeeds there is nothing to regress against, so skip
+        # rather than assert a vacuous pass.
+        guard = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        with guard:
+            try:
+                guard.bind(("127.0.0.1", port))
+            except OSError:
+                pass
+            else:
+                self.skipTest("port did not enter TIME_WAIT on this platform")
+
+        # uvicorn is stubbed in sys.modules, so start_api_server's `import uvicorn`
+        # cannot trigger a fresh import while threading.Thread is patched, and no
+        # real server thread is left running when this block unwinds.
+        with patch.dict(
+            "sys.modules",
+            {"uvicorn": self._started_uvicorn_stub(), **_api_app_stub_modules()},
+        ), patch("threading.Thread"):
+            main.start_api_server("127.0.0.1", port, config)
+
+    def test_start_api_server_probe_skips_reuseaddr_on_windows(self) -> None:
+        """Simulated platform check: the SO_REUSEADDR gate must stay off on Windows.
+
+        On Windows SO_REUSEADDR permits binding over a live listener, so setting it
+        unconditionally would turn the probe into a no-op there. This pins the gate;
+        it is a simulation, not evidence of native Windows runtime behaviour.
+        """
+        config = self._make_config(log_level="INFO")
+        recorded = []
+
+        class _RecordingSocket:
+            def setsockopt(self, level, optname, value):
+                recorded.append((level, optname, value))
+
+            def bind(self, address):
+                raise OSError("address already in use")
+
+            def close(self):
+                pass
+
+        # main.sys IS the global sys module, so this patch is process-wide for the
+        # duration of the block -- and start_api_server does `import uvicorn` before
+        # the probe. Stub uvicorn out so that import cannot hit uvicorn's
+        # `if sys.platform == "win32": ... signal.SIGBREAK` branch, which does not
+        # exist on POSIX. Without the stub this test passes only when an earlier
+        # test happened to import the real uvicorn first.
+        with patch("socket.socket", return_value=_RecordingSocket()), \
+             patch.dict("sys.modules", {"uvicorn": self._started_uvicorn_stub()}), \
+             patch("main.os.name", "nt"), \
+             patch("main.sys.platform", "win32"), \
+             patch("threading.Thread") as thread_cls:
+            with self.assertRaises(RuntimeError):
+                main.start_api_server("127.0.0.1", 8000, config)
+
+        self.assertEqual(recorded, [])
+        thread_cls.assert_not_called()
+
+    def test_start_api_server_probe_sets_reuseaddr_on_posix(self) -> None:
+        """Counterpart to the Windows case: on POSIX the option must be applied."""
+        config = self._make_config(log_level="INFO")
+        recorded = []
+
+        class _RecordingSocket:
+            def setsockopt(self, level, optname, value):
+                recorded.append((level, optname, value))
+
+            def bind(self, address):
+                raise OSError("address already in use")
+
+            def close(self):
+                pass
+
+        # Stub uvicorn for the same reason as the Windows counterpart: keep the test
+        # independent of whether an earlier test already imported the real module.
+        with patch("socket.socket", return_value=_RecordingSocket()), \
+             patch.dict("sys.modules", {"uvicorn": self._started_uvicorn_stub()}), \
+             patch("main.os.name", "posix"), \
+             patch("main.sys.platform", "linux"), \
+             patch("threading.Thread"):
+            with self.assertRaises(RuntimeError):
+                main.start_api_server("127.0.0.1", 8000, config)
+
+        self.assertEqual(recorded, [(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)])
 
     def test_schedule_mode_ignores_cli_stock_snapshot(self) -> None:
         args = self._make_args(schedule=True, stocks="600519,000001")

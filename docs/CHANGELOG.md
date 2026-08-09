@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [修复] Web 服务启动前的端口预检不再误判上一个实例遗留的残余 socket（TIME_WAIT，或浏览器仍持有 keep-alive 连线时的 FIN_WAIT_2）。预检 socket 此前不设 `SO_REUSEADDR`，比真正绑定端口的 `loop.create_server()` 更严格（asyncio 与 uvloop 均在 `os.name == "posix" and sys.platform != "cygwin"` 时启用该选项），导致停止服务后立即重启会报 `FastAPI port is not available`，而 uvicorn 本可正常绑定。该选项按同一平台条件加上：Linux 实测下仍会拒绝真正被监听占用的端口，Windows 下不设置（该平台 `SO_REUSEADDR` 允许覆盖存活监听，设置后预检将形同虚设）。预检始终只镜像服务端的实际行为，不会放行 uvicorn 自己也绑不上的端口。影响 `--serve` / `--serve-only` / `--serve --schedule`；`--serve` 系列此前会静默吞掉该失败，表现为机器人流客户端未启动、Web/API 运行时调度器降级为 CLI 调度器
 - [修复] 问股、持仓、告警三个页面的写死简体文案接入 i18n（239 个新键 × 3 语言）。此前这些字串不随界面语言切换——把界面切成英文，画面上仍是简体，繁体界面同理。判据是英文界面下页面文本仍含中文，说明它们从未进入语言体系，与繁体支持无关。新增 `noHardcodedChinese` 白名单守卫测试：允许保留的中文须逐条登记理由，未登记的新写死文案会让测试失败，并显式记录尚未改造的页面清单。设置页与问股策略名仍为简体，因为文本由后端 API 返回，需另行设计接口本地化
 - [新功能] Web 界面语言新增繁体中文（台湾），切换入口由中/英二选一改为「中 → 繁 → EN」三态循环，持久化 key `dsa.uiLanguage` 与既有 `zh`/`en` 存档值行为不变；浏览器语言为 `zh-TW`/`zh-Hant`/`zh-HK`/`zh-MO` 时首次进入即为繁体，其余 `zh-*` 仍为简体。覆盖 `uiText`（932 条）、`featureText`（28 张标签表）、系统配置分类、运行流程时间格式（`zh-TW` locale）与 `document.lang`。界面语言与 `REPORT_LANGUAGE` 仍是相互独立的两套设置
 - [修复] 问股（Agent）与 Agent 报告路径补上 `zh-tw` 输出语言指令。此前 `_build_language_section` 与 `DecisionAgent` 的系统提示只分辨 `en`/`ko`，`zh-tw` 落进通用中文分支且只写「默认使用中文回答」，从未要求繁体，因此 `REPORT_LANGUAGE=zh-tw` 下问台股仍得到简体回答。繁体指令收敛为 `src/report_language.TRADITIONAL_CHINESE_OUTPUT_DIRECTIVE` 单一真源，避免与个股/大盘路径的措辞继续漂移；`zh`/`en`/`ko` 行为不变
