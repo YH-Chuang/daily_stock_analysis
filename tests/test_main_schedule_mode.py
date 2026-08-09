@@ -269,6 +269,9 @@ class MainScheduleModeTestCase(unittest.TestCase):
         config = self._make_config(log_level="INFO")
 
         class BusySocket:
+            def setsockopt(self, level, optname, value):
+                pass
+
             def bind(self, address):
                 raise OSError("address already in use")
 
@@ -305,6 +308,9 @@ class MainScheduleModeTestCase(unittest.TestCase):
             Server = _FakeUvicornServer
 
         class _UnusedSocket:
+            def setsockopt(self, level, optname, value):
+                pass
+
             def bind(self, address):
                 pass
 
@@ -346,6 +352,9 @@ class MainScheduleModeTestCase(unittest.TestCase):
                     raise TypeError("install_signal_handlers is unsupported")
 
         class _UnusedSocket:
+            def setsockopt(self, level, optname, value):
+                pass
+
             def bind(self, address):
                 pass
 
@@ -365,6 +374,56 @@ class MainScheduleModeTestCase(unittest.TestCase):
         self.assertIsNotNone(_CompatServer.instance)
         self.assertTrue(callable(_CompatServer.instance.install_signal_handlers))
         self.assertTrue(_CompatServer.instance.started)
+
+    @staticmethod
+    def _started_uvicorn_stub():
+        """A uvicorn stand-in whose server reports a successful startup."""
+
+        class _StartedServer:
+            def __init__(self, config):
+                self.config = config
+                self.started = False
+
+            def run(self) -> None:
+                self.started = True
+
+        class _StartedConfig:
+            def __init__(self, *args, **kwargs):
+                pass
+
+        return SimpleNamespace(Config=_StartedConfig, Server=_StartedServer)
+
+    def test_start_api_server_rejects_port_with_live_listener(self) -> None:
+        """The probe's whole purpose: a port with a live listener must still fail fast.
+
+        Uses a real socket rather than a fake so the SO_REUSEADDR change is
+        exercised against the kernel instead of against a stub.
+        """
+        config = self._make_config(log_level="INFO")
+
+        try:
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        except (OSError, PermissionError) as exc:
+            self.skipTest(f"local socket creation is not permitted in this environment: {exc}")
+
+        with listener:
+            # Mirror the listener asyncio/uvloop would create, so the test proves
+            # the probe still refuses even the option-for-option identical case.
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                listener.bind(("127.0.0.1", 0))
+            except (OSError, PermissionError) as exc:
+                self.skipTest(f"local socket bind is not permitted in this environment: {exc}")
+            listener.listen(1)
+            port = listener.getsockname()[1]
+
+            with patch("threading.Thread") as thread_cls:
+                with self.assertRaises(RuntimeError) as caught:
+                    main.start_api_server("127.0.0.1", port, config)
+
+        self.assertIn(f"127.0.0.1:{port}", str(caught.exception))
+        # The probe must fail before the thread and before the heavy api.app import.
+        thread_cls.assert_not_called()
 
     def test_schedule_mode_ignores_cli_stock_snapshot(self) -> None:
         args = self._make_args(schedule=True, stocks="600519,000001")
