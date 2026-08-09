@@ -400,6 +400,18 @@ class MainScheduleModeTestCase(unittest.TestCase):
         exercised against the kernel instead of against a stub.
         """
         config = self._make_config(log_level="INFO")
+        built: list[str] = []
+
+        class _NeverBuiltServer:
+            def __init__(self, config):
+                built.append("Server")
+
+            def run(self) -> None:  # pragma: no cover - must never be reached
+                built.append("run")
+
+        class _NeverBuiltConfig:
+            def __init__(self, *args, **kwargs):
+                built.append("Config")
 
         try:
             listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -417,13 +429,28 @@ class MainScheduleModeTestCase(unittest.TestCase):
             listener.listen(1)
             port = listener.getsockname()[1]
 
-            with patch("threading.Thread") as thread_cls:
+            # start_api_server imports uvicorn before it probes, so uvicorn must be
+            # stubbed rather than freshly imported here. Do NOT patch
+            # threading.Thread to assert "no thread was created": a real
+            # `import uvicorn` under that patch permanently rebinds
+            # anyio.from_thread.Thread to the mock, which silently breaks
+            # Starlette's TestClient portal for every later test in the process.
+            # Asserting that uvicorn was never even configured proves the probe
+            # failed earlier than the thread would have been created anyway.
+            with patch.dict(
+                "sys.modules",
+                {
+                    "uvicorn": SimpleNamespace(Config=_NeverBuiltConfig, Server=_NeverBuiltServer),
+                    **_api_app_stub_modules(),
+                },
+            ):
                 with self.assertRaises(RuntimeError) as caught:
                     main.start_api_server("127.0.0.1", port, config)
 
         self.assertIn(f"127.0.0.1:{port}", str(caught.exception))
-        # The probe must fail before the thread and before the heavy api.app import.
-        thread_cls.assert_not_called()
+        # The probe must fail before uvicorn is configured, before the server
+        # thread, and before the heavy api.app import.
+        self.assertEqual(built, [])
 
     def test_start_api_server_accepts_port_left_in_time_wait(self) -> None:
         """A port holding only a residual socket is bindable by uvicorn, so the probe must allow it.
