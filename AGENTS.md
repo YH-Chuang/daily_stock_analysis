@@ -11,7 +11,6 @@
   - Web 前端改动在 `apps/dsa-web/`
   - 桌面端改动在 `apps/dsa-desktop/`
   - 部署与流水线改动在 `scripts/`、`.github/workflows/`、`docker/`
-- 未经明确确认，不执行 `git commit`、`git tag`、`git push`。
 - commit message 使用英文，不添加 `Co-Authored-By`。
 - 不写死密钥、账号、路径、模型名、端口或环境差异逻辑。
 - 优先复用现有模块、配置入口、脚本和测试，不新增平行实现。
@@ -25,6 +24,14 @@
 - 更细的模块行为、页面交互、专题配置、排障说明、字段契约、实现语义和边界条件，优先更新对应 `docs/*.md` 或专题文档，不写入 README。
 - 变更中英双语文档之一时，需评估另一份是否需要同步；若未同步，交付说明里要写明原因。
 - 注释、docstring、日志文案以清晰准确为准，不强制要求英文，但应与文件语境保持一致。
+- 在用户已交办的任务范围内，可自主执行 `git commit`、`git push`、`gh pr create`、`gh pr merge`，无需逐次确认，但必须同时满足：
+  - 改动属于该任务范围，未夹带无关重构；
+  - 已按第 6 节验证矩阵完成对应改动面的验证；
+  - 合入时当前 Head 的阻断型 CI 全部为 pass（`ai-governance`、`backend-gate`、`docker-build`，前端改动时含 `web-gate`）；
+  - 不命中第 8 节任一「合入阻断条件」；
+  - 合入后按第 9 节交付结构如实回报，包含未验证项与风险点。
+- 以下操作仍需用户明确确认：`git tag` 与发布 Release；向 `main` 或他人分支 force push；`git reset --hard`、`git rebase`、`git stash` 等会覆盖他人已推送提交或本地未提交改动的操作；删除他人分支；修改 `.github/workflows/**` 的触发条件、权限边界或发布流程。
+- 自主合入不等于降低标准：验证不足、CI 未通过、PR 描述与实际 diff 不一致时，应停下来说明，而不是先合再补。
 
 ## 1.1 PR 标题规范（非阻断建议）
 
